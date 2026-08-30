@@ -1,6 +1,6 @@
+streamlit
+plotly
+pandas
 requests
 python-dotenv
-pandas
 google-generativeai
-google-genai
-openai
