@@ -615,114 +615,866 @@ def get_billing_summary(work_orders_df: pd.DataFrame) -> Dict[str, Any]:
         "billing_status_distribution": status_dist
     }
 
-
 # ============================================================
 # SECTOR PERFORMANCE / CROSS-BOARD ANALYSIS
 # ============================================================
 
-def get_sector_performance(deals_df: pd.DataFrame, work_orders_df: pd.DataFrame) -> List[Dict[str, Any]]:
+def get_sector_performance(
+    deals_df: pd.DataFrame,
+    work_orders_df: pd.DataFrame
+) -> List[Dict[str, Any]]:
     """
-    Perform sector-level outer join between Deals and Work Orders.
+    Perform sector-level cross-board analysis between Deals and
+    Work Orders.
+
+    Handles:
+    - Deals and Work Orders with different sector column names
+    - Case-insensitive sector matching
+    - Text and numeric closure probabilities
+    - Percentage probability values such as "80%"
+    - Missing/null values
+    - Open / On Hold deal classification
+    - Weighted pipeline calculations
+    - Work-order execution status
+    - Work-order financial values
+    - Billed values
+    - Receivables
+    - Sectors existing only in Deals or Work Orders
+    - Empty DataFrames
     """
+
+    # ============================================================
+    # 0. CLEAN INPUT DATA
+    # ============================================================
+
     deals = clean_deals_df(deals_df)
     wos = clean_work_orders_df(work_orders_df)
-    
-    # 1. Deals Aggregation
+
+    # ============================================================
+    # SAFE PROBABILITY CONVERTER
+    # ============================================================
+
+    def safe_probability_number(value):
+        """
+        Convert closure probability to a numeric value.
+
+        Supported examples:
+            High        -> 0.80
+            Medium      -> 0.50
+            Low         -> 0.20
+            0.8         -> 0.80
+            "0.8"       -> 0.80
+            80          -> 0.80
+            "80%"       -> 0.80
+        """
+
+        if value is None:
+            return None
+
+        try:
+            if pd.isna(value):
+                return None
+        except (TypeError, ValueError):
+            pass
+
+        # --------------------------------------------------------
+        # Numeric values
+        # --------------------------------------------------------
+
+        if isinstance(value, (int, float)):
+            try:
+                numeric_value = float(value)
+
+                if numeric_value > 1:
+                    numeric_value = numeric_value / 100.0
+
+                # Keep probability in valid range
+                return max(0.0, min(1.0, numeric_value))
+
+            except (TypeError, ValueError):
+                return None
+
+        # --------------------------------------------------------
+        # String values
+        # --------------------------------------------------------
+
+        value_str = str(value).strip().lower()
+
+        if not value_str:
+            return None
+
+        value_str = value_str.replace(" ", "")
+
+        # --------------------------------------------------------
+        # Percentage string
+        # --------------------------------------------------------
+
+        if value_str.endswith("%"):
+            try:
+                numeric_value = float(value_str[:-1]) / 100.0
+                return max(0.0, min(1.0, numeric_value))
+            except (ValueError, TypeError):
+                return None
+
+        # --------------------------------------------------------
+        # Named probabilities
+        # --------------------------------------------------------
+
+        probability_mapping = {
+            "high": 0.80,
+            "medium": 0.50,
+            "low": 0.20,
+
+            "veryhigh": 0.90,
+            "very_high": 0.90,
+            "veryhighprobability": 0.90,
+
+            "verylow": 0.10,
+            "very_low": 0.10,
+
+            "none": None,
+            "unknown": None,
+            "n/a": None,
+            "na": None,
+            "null": None,
+        }
+
+        if value_str in probability_mapping:
+            return probability_mapping[value_str]
+
+        # --------------------------------------------------------
+        # Numeric string
+        # --------------------------------------------------------
+
+        try:
+            numeric_value = float(value_str)
+
+            if numeric_value > 1:
+                numeric_value = numeric_value / 100.0
+
+            return max(0.0, min(1.0, numeric_value))
+
+        except (ValueError, TypeError):
+            return None
+
+    # ============================================================
+    # 1. DEALS AGGREGATION
+    # ============================================================
+
     if not deals.empty:
+
         deals_df_norm = deals.copy()
-        deals_df_norm["normalized_sector"] = deals_df_norm["sector_service"].apply(normalize_sector)
-        deals_df_norm["deal_value_clean"] = deals_df_norm["deal_value"].fillna(0.0)
-        
-        status_series = deals_df_norm["deal_status"].apply(normalize_text)
-        status_lower = status_series.str.lower()
-        
-        deals_df_norm["is_open"] = status_lower.isin(["open", "open deal"]) | status_series.isna()
-        deals_df_norm["is_hold"] = status_lower == "on hold"
-        deals_df_norm["is_active"] = deals_df_norm["is_open"] | deals_df_norm["is_hold"]
-        
-        prob_series = deals_df_norm["closure_probability"].apply(normalize_text)
-        deals_df_norm["prob_num"] = prob_series.apply(
-            lambda x: CLOSURE_PROBABILITY_MAPPING.get(x.lower()) if x else None
+
+        # --------------------------------------------------------
+        # Normalize sector
+        # --------------------------------------------------------
+
+        if "sector_service" in deals_df_norm.columns:
+
+            deals_df_norm["normalized_sector"] = (
+                deals_df_norm["sector_service"]
+                .apply(normalize_sector)
+            )
+
+        elif "sector" in deals_df_norm.columns:
+
+            deals_df_norm["normalized_sector"] = (
+                deals_df_norm["sector"]
+                .apply(normalize_sector)
+            )
+
+        else:
+
+            deals_df_norm["normalized_sector"] = "Unknown"
+
+        # Replace missing / blank sectors
+        deals_df_norm["normalized_sector"] = (
+            deals_df_norm["normalized_sector"]
+            .fillna("Unknown")
+            .astype(str)
+            .str.strip()
         )
-        deals_df_norm["weighted_val"] = deals_df_norm["deal_value_clean"] * deals_df_norm["prob_num"].fillna(0.0)
-        
-        # Precompute values to sum
-        deals_df_norm["open_val"] = deals_df_norm["deal_value_clean"].where(deals_df_norm["is_open"], 0.0)
-        
-        deals_grouped = deals_df_norm.groupby("normalized_sector").agg(
-            deal_count=("id", "count"),
-            portfolio_value=("deal_value_clean", "sum"),
-            open_count=("is_open", "sum"),
-            active_count=("is_active", "sum"),
-            open_pipeline_value=("open_val", "sum"),
-            weighted_value=("weighted_val", "sum")
-        ).reset_index()
+
+        deals_df_norm.loc[
+            deals_df_norm["normalized_sector"] == "",
+            "normalized_sector"
+        ] = "Unknown"
+
+        # --------------------------------------------------------
+        # Clean deal value
+        # --------------------------------------------------------
+
+        if "deal_value" in deals_df_norm.columns:
+
+            deals_df_norm["deal_value_clean"] = pd.to_numeric(
+                deals_df_norm["deal_value"],
+                errors="coerce"
+            ).fillna(0.0)
+
+        else:
+
+            deals_df_norm["deal_value_clean"] = 0.0
+
+        # --------------------------------------------------------
+        # Deal status
+        # --------------------------------------------------------
+
+        if "deal_status" in deals_df_norm.columns:
+
+            status_series = (
+                deals_df_norm["deal_status"]
+                .apply(normalize_text)
+            )
+
+        else:
+
+            status_series = pd.Series(
+                [None] * len(deals_df_norm),
+                index=deals_df_norm.index
+            )
+
+        status_lower = (
+            status_series
+            .astype("string")
+            .str.strip()
+            .str.lower()
+        )
+
+        # --------------------------------------------------------
+        # Open deals
+        # --------------------------------------------------------
+
+        deals_df_norm["is_open"] = (
+            status_lower.isin(
+                [
+                    "open",
+                    "open deal"
+                ]
+            )
+            | status_series.isna()
+        )
+
+        # --------------------------------------------------------
+        # On-hold deals
+        # --------------------------------------------------------
+
+        deals_df_norm["is_hold"] = (
+            status_lower == "on hold"
+        )
+
+        # --------------------------------------------------------
+        # Active deals = Open OR On Hold
+        # --------------------------------------------------------
+
+        deals_df_norm["is_active"] = (
+            deals_df_norm["is_open"]
+            | deals_df_norm["is_hold"]
+        )
+
+        # --------------------------------------------------------
+        # Closure probability
+        # --------------------------------------------------------
+
+        if "closure_probability" in deals_df_norm.columns:
+
+            prob_series = (
+                deals_df_norm["closure_probability"]
+            )
+
+        else:
+
+            prob_series = pd.Series(
+                [None] * len(deals_df_norm),
+                index=deals_df_norm.index
+            )
+
+        deals_df_norm["prob_num"] = (
+            prob_series
+            .apply(safe_probability_number)
+        )
+
+        # --------------------------------------------------------
+        # Weighted pipeline
+        # --------------------------------------------------------
+
+        deals_df_norm["weighted_val"] = (
+            deals_df_norm["deal_value_clean"]
+            * deals_df_norm["prob_num"].fillna(0.0)
+        )
+
+        # --------------------------------------------------------
+        # Open pipeline
+        # --------------------------------------------------------
+
+        deals_df_norm["open_val"] = (
+            deals_df_norm["deal_value_clean"]
+            .where(
+                deals_df_norm["is_open"],
+                0.0
+            )
+        )
+
+        # --------------------------------------------------------
+        # Deal ID
+        # --------------------------------------------------------
+
+        if "id" not in deals_df_norm.columns:
+
+            deals_df_norm["id"] = range(
+                len(deals_df_norm)
+            )
+
+        # --------------------------------------------------------
+        # Group Deals by Sector
+        # --------------------------------------------------------
+
+        deals_grouped = (
+            deals_df_norm
+            .groupby(
+                "normalized_sector",
+                dropna=False
+            )
+            .agg(
+                deal_count=("id", "count"),
+                portfolio_value=(
+                    "deal_value_clean",
+                    "sum"
+                ),
+                open_count=(
+                    "is_open",
+                    "sum"
+                ),
+                active_count=(
+                    "is_active",
+                    "sum"
+                ),
+                open_pipeline_value=(
+                    "open_val",
+                    "sum"
+                ),
+                weighted_value=(
+                    "weighted_val",
+                    "sum"
+                )
+            )
+            .reset_index()
+        )
+
     else:
-        deals_grouped = pd.DataFrame(columns=[
-            "normalized_sector", "deal_count", "portfolio_value", 
-            "open_count", "active_count", "open_pipeline_value", "weighted_value"
-        ])
-        
-    # 2. Work Orders Aggregation
+
+        deals_grouped = pd.DataFrame(
+            columns=[
+                "normalized_sector",
+                "deal_count",
+                "portfolio_value",
+                "open_count",
+                "active_count",
+                "open_pipeline_value",
+                "weighted_value"
+            ]
+        )
+
+    # ============================================================
+    # 2. WORK ORDERS AGGREGATION
+    # ============================================================
+
     if not wos.empty:
+
         wos_df_norm = wos.copy()
-        wos_df_norm["normalized_sector"] = wos_df_norm["sector"].apply(normalize_sector)
-        
-        # We also want to compute status distribution per sector
-        wos_grouped = wos_df_norm.groupby("normalized_sector").agg(
-            wo_count=("id", "count"),
-            order_value_excl=("amount_excl_gst", lambda x: float(x.fillna(0.0).sum())),
-            billed_value_excl=("billed_value_excl_gst", lambda x: float(x.fillna(0.0).sum())),
-            receivables=("amount_receivable", lambda x: float(x.fillna(0.0).sum()))
-        ).reset_index()
+
+        # --------------------------------------------------------
+        # Normalize sector
+        #
+        # IMPORTANT:
+        # Work Orders test data uses "sector".
+        # Some Monday.com data may use "sector_service".
+        # --------------------------------------------------------
+
+        if "sector" in wos_df_norm.columns:
+
+            wos_df_norm["normalized_sector"] = (
+                wos_df_norm["sector"]
+                .apply(normalize_sector)
+            )
+
+        elif "sector_service" in wos_df_norm.columns:
+
+            wos_df_norm["normalized_sector"] = (
+                wos_df_norm["sector_service"]
+                .apply(normalize_sector)
+            )
+
+        else:
+
+            wos_df_norm["normalized_sector"] = "Unknown"
+
+        # Replace missing / blank sectors
+        wos_df_norm["normalized_sector"] = (
+            wos_df_norm["normalized_sector"]
+            .fillna("Unknown")
+            .astype(str)
+            .str.strip()
+        )
+
+        wos_df_norm.loc[
+            wos_df_norm["normalized_sector"] == "",
+            "normalized_sector"
+        ] = "Unknown"
+
+        # --------------------------------------------------------
+        # Work-order value
+        #
+        # Priority:
+        # 1. amount_excl_gst
+        # 2. order_value_excl_gst
+        # 3. order_value
+        # --------------------------------------------------------
+
+        if "amount_excl_gst" in wos_df_norm.columns:
+
+            wos_df_norm["order_value_clean"] = (
+                pd.to_numeric(
+                    wos_df_norm["amount_excl_gst"],
+                    errors="coerce"
+                )
+                .fillna(0.0)
+            )
+
+        elif "order_value_excl_gst" in wos_df_norm.columns:
+
+            wos_df_norm["order_value_clean"] = (
+                pd.to_numeric(
+                    wos_df_norm["order_value_excl_gst"],
+                    errors="coerce"
+                )
+                .fillna(0.0)
+            )
+
+        elif "order_value" in wos_df_norm.columns:
+
+            wos_df_norm["order_value_clean"] = (
+                pd.to_numeric(
+                    wos_df_norm["order_value"],
+                    errors="coerce"
+                )
+                .fillna(0.0)
+            )
+
+        else:
+
+            wos_df_norm["order_value_clean"] = 0.0
+
+        # --------------------------------------------------------
+        # Billed Value Excl GST
+        # --------------------------------------------------------
+
+        if "billed_value_excl_gst" in wos_df_norm.columns:
+
+            wos_df_norm["billed_value_clean"] = (
+                pd.to_numeric(
+                    wos_df_norm["billed_value_excl_gst"],
+                    errors="coerce"
+                )
+                .fillna(0.0)
+            )
+
+        else:
+
+            wos_df_norm["billed_value_clean"] = 0.0
+
+        # --------------------------------------------------------
+        # Receivables
+        #
+        # Priority:
+        # 1. amount_receivable
+        # 2. receivables
+        # --------------------------------------------------------
+
+        if "amount_receivable" in wos_df_norm.columns:
+
+            wos_df_norm["receivables_clean"] = (
+                pd.to_numeric(
+                    wos_df_norm["amount_receivable"],
+                    errors="coerce"
+                )
+                .fillna(0.0)
+            )
+
+        elif "receivables" in wos_df_norm.columns:
+
+            wos_df_norm["receivables_clean"] = (
+                pd.to_numeric(
+                    wos_df_norm["receivables"],
+                    errors="coerce"
+                )
+                .fillna(0.0)
+            )
+
+        else:
+
+            wos_df_norm["receivables_clean"] = 0.0
+
+        # --------------------------------------------------------
+        # Work Order Status
+        # --------------------------------------------------------
+
+        if "execution_status" in wos_df_norm.columns:
+
+            status_series = (
+                wos_df_norm["execution_status"]
+                .apply(normalize_text)
+            )
+
+        else:
+
+            status_series = pd.Series(
+                [None] * len(wos_df_norm),
+                index=wos_df_norm.index
+            )
+
+        status_lower = (
+            status_series
+            .astype("string")
+            .str.strip()
+            .str.lower()
+        )
+
+        # --------------------------------------------------------
+        # Completed Work Orders
+        # --------------------------------------------------------
+
+        wos_df_norm["is_completed"] = (
+            status_lower.isin(
+                [
+                    "completed",
+                    "complete",
+                    "closed",
+                    "done"
+                ]
+            )
+        )
+
+        # --------------------------------------------------------
+        # Open Work Orders
+        #
+        # Anything not explicitly completed is considered open.
+        # This correctly handles:
+        # Ongoing
+        # Executed until current month
+        # In Progress
+        # Pending
+        # etc.
+        # --------------------------------------------------------
+
+        wos_df_norm["is_open"] = (
+            ~wos_df_norm["is_completed"]
+        )
+
+        # --------------------------------------------------------
+        # Work Order ID
+        # --------------------------------------------------------
+
+        if "id" not in wos_df_norm.columns:
+
+            wos_df_norm["id"] = range(
+                len(wos_df_norm)
+            )
+
+        # --------------------------------------------------------
+        # Group Work Orders by Sector
+        # --------------------------------------------------------
+
+        wos_grouped = (
+            wos_df_norm
+            .groupby(
+                "normalized_sector",
+                dropna=False
+            )
+            .agg(
+                work_order_count=(
+                    "id",
+                    "count"
+                ),
+                completed_count=(
+                    "is_completed",
+                    "sum"
+                ),
+                open_count=(
+                    "is_open",
+                    "sum"
+                ),
+                order_value=(
+                    "order_value_clean",
+                    "sum"
+                ),
+                billed_value_excl_gst=(
+                    "billed_value_clean",
+                    "sum"
+                ),
+                receivables=(
+                    "receivables_clean",
+                    "sum"
+                )
+            )
+            .reset_index()
+        )
+
     else:
-        wos_grouped = pd.DataFrame(columns=["normalized_sector", "wo_count", "order_value_excl", "billed_value_excl", "receivables"])
-        
-    # 3. Outer Join
-    merged = pd.merge(
+
+        wos_grouped = pd.DataFrame(
+            columns=[
+                "normalized_sector",
+                "work_order_count",
+                "completed_count",
+                "open_count",
+                "order_value",
+                "billed_value_excl_gst",
+                "receivables"
+            ]
+        )
+
+    # ============================================================
+    # 3. CROSS-BOARD OUTER JOIN
+    # ============================================================
+
+    sector_df = pd.merge(
         deals_grouped,
         wos_grouped,
         on="normalized_sector",
         how="outer"
-    ).fillna(0.0)
-    
-    # 4. Construct response list
-    results = []
-    
-    # To fetch status distributions per sector
-    wos_by_sector = {}
-    if not wos.empty:
-        for (sec, status), grp in wos.groupby([wos["sector"].apply(normalize_sector), wos["execution_status"].apply(lambda x: normalize_text(x) or "Unknown / Missing")]):
-            if sec not in wos_by_sector:
-                wos_by_sector[sec] = {}
-            wos_by_sector[sec][status] = len(grp)
-            
-    for _, row in merged.iterrows():
-        sec = row["normalized_sector"]
-        
-        results.append({
-            "sector": sec,
-            "deals": {
-                "count": int(row.get("deal_count", 0)),
-                "portfolio_value": float(row.get("portfolio_value", 0.0)),
-                "open_count": int(row.get("open_count", 0)),
-                "active_count": int(row.get("active_count", 0)),
-                "open_pipeline_value": float(row.get("open_pipeline_value", 0.0)),
-                "weighted_pipeline_value": float(row.get("weighted_value", 0.0))
-            },
-            "work_orders": {
-                "count": int(row.get("wo_count", 0)),
-                "order_value_excl_gst": float(row.get("order_value_excl", 0.0)),
-                "billed_value_excl_gst": float(row.get("billed_value_excl", 0.0)),
-                "receivables": float(row.get("receivables", 0.0)),
-                "execution_status_distribution": wos_by_sector.get(sec, {})
-            }
-        })
-        
-    # Sort by sector name
-    results.sort(key=lambda x: x["sector"])
-    return results
+    )
 
+    # ------------------------------------------------------------
+    # Empty result
+    # ------------------------------------------------------------
+
+    if sector_df.empty:
+        return []
+
+    # ============================================================
+    # 4. NORMALIZE MERGED NUMERIC COLUMNS
+    # ============================================================
+
+    numeric_columns = [
+        "deal_count",
+        "portfolio_value",
+        "open_count_x",
+        "active_count",
+        "open_pipeline_value",
+        "weighted_value",
+
+        "work_order_count",
+        "completed_count",
+        "open_count_y",
+        "order_value",
+        "billed_value_excl_gst",
+        "receivables"
+    ]
+
+    for col in numeric_columns:
+
+        if col in sector_df.columns:
+
+            sector_df[col] = (
+                pd.to_numeric(
+                    sector_df[col],
+                    errors="coerce"
+                )
+                .fillna(0.0)
+            )
+
+    # ============================================================
+    # 5. BUILD FINAL RESULT
+    # ============================================================
+
+    results = []
+
+    for _, row in sector_df.iterrows():
+
+        # --------------------------------------------------------
+        # Sector
+        # --------------------------------------------------------
+
+        sector = row.get(
+            "normalized_sector",
+            "Unknown"
+        )
+
+        if pd.isna(sector):
+            sector = "Unknown"
+
+        sector = str(sector).strip()
+
+        if not sector:
+            sector = "Unknown"
+
+        # --------------------------------------------------------
+        # Deal metrics
+        # --------------------------------------------------------
+
+        deal_count = int(
+            row.get(
+                "deal_count",
+                0
+            )
+        )
+
+        portfolio_value = float(
+            row.get(
+                "portfolio_value",
+                0.0
+            )
+        )
+
+        open_deals_count = int(
+            row.get(
+                "open_count_x",
+                0
+            )
+        )
+
+        active_deals_count = int(
+            row.get(
+                "active_count",
+                0
+            )
+        )
+
+        open_pipeline_value = float(
+            row.get(
+                "open_pipeline_value",
+                0.0
+            )
+        )
+
+        weighted_value = float(
+            row.get(
+                "weighted_value",
+                0.0
+            )
+        )
+
+        # --------------------------------------------------------
+        # Work-order metrics
+        # --------------------------------------------------------
+
+        work_order_count = int(
+            row.get(
+                "work_order_count",
+                0
+            )
+        )
+
+        completed_count = int(
+            row.get(
+                "completed_count",
+                0
+            )
+        )
+
+        open_work_orders = int(
+            row.get(
+                "open_count_y",
+                0
+            )
+        )
+
+        order_value = float(
+            row.get(
+                "order_value",
+                0.0
+            )
+        )
+
+        billed_value_excl_gst = float(
+            row.get(
+                "billed_value_excl_gst",
+                0.0
+            )
+        )
+
+        receivables = float(
+            row.get(
+                "receivables",
+                0.0
+            )
+        )
+
+        # --------------------------------------------------------
+        # Completion rate
+        # --------------------------------------------------------
+
+        if work_order_count > 0:
+
+            completion_rate = (
+                completed_count
+                / work_order_count
+                * 100
+            )
+
+        else:
+
+            completion_rate = 0.0
+
+        # --------------------------------------------------------
+        # Build result
+        # --------------------------------------------------------
+
+        results.append(
+            {
+                "sector": sector,
+
+                "deals": {
+                    "count": deal_count,
+                    "portfolio_value": portfolio_value,
+                    "open_count": open_deals_count,
+                    "active_count": active_deals_count,
+                    "open_pipeline_value": open_pipeline_value,
+                    "weighted_value": weighted_value,
+
+                    # Compatibility alias used by some
+                    # AI-agent rendering paths.
+                    "weighted_pipeline_value": weighted_value
+                },
+
+                "work_orders": {
+                    "count": work_order_count,
+                    "completed_count": completed_count,
+                    "open_count": open_work_orders,
+
+                    "completion_rate_percentage": round(
+                        completion_rate,
+                        2
+                    ),
+
+                    # Primary financial field
+                    "order_value": order_value,
+
+                    # Compatibility key expected by
+                    # AI-agent sector-performance renderer.
+                    "order_value_excl_gst": order_value,
+
+                    "billed_value_excl_gst": (
+                        billed_value_excl_gst
+                    ),
+
+                    "receivables": receivables
+                }
+            }
+        )
+
+    # ============================================================
+    # 6. SORT BY OPEN PIPELINE
+    # ============================================================
+
+    results.sort(
+        key=lambda x: (
+            x["deals"]["open_pipeline_value"]
+        ),
+        reverse=True
+    )
+
+    return results
 
 # ============================================================
 # DATA QUALITY SUMMARY
