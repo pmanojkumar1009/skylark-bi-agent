@@ -20,14 +20,32 @@ CLOSURE_PROBABILITY_MAPPING = {
 # DATA CLEANING AND NORMALIZATION HELPERS
 # ============================================================
 
-def normalize_text(val: Any) -> Optional[str]:
-    """Helper to strip whitespace, handle nulls, and return string."""
-    if pd.isna(val) or val is None:
+def normalize_text(value) -> str | None:
+    """
+    Safely normalize values coming from Monday.com.
+
+    Handles None, NaN, numeric values, and unexpected objects
+    without raising AttributeError.
+    """
+    if value is None:
         return None
-    val_str = str(val).strip()
-    if val_str.lower() in ["", "none", "nan", "null", "-", "--"]:
+
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+
+    if isinstance(value, str):
+        value = value.strip()
+        return value if value else None
+
+    # Monday.com can occasionally return non-string values.
+    try:
+        value = str(value).strip()
+        return value if value else None
+    except Exception:
         return None
-    return val_str
 
 
 def normalize_sector(sector_name: Any) -> str:
@@ -130,7 +148,7 @@ def get_pipeline_summary(deals_df: pd.DataFrame) -> Dict[str, Any]:
     # --------------------------------------------------------
     # Normalize status
     # --------------------------------------------------------
-    status_series = df["deal_status"].apply(normalize_text)
+    status_series = df["deal_status"].map(normalize_text)
 
     status_lower = (
         status_series
@@ -143,7 +161,7 @@ def get_pipeline_summary(deals_df: pd.DataFrame) -> Dict[str, Any]:
     # --------------------------------------------------------
     # Normalize closure probability
     # --------------------------------------------------------
-    prob_series = df["closure_probability"].apply(normalize_text)
+    prob_series = df["closure_probability"].map(normalize_text)
 
     def map_probability(value):
         if value is None or pd.isna(value):
