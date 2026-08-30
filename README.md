@@ -1,188 +1,125 @@
+Yes. Your current README is **technically strong but too long, repetitive, and assignment-documentation-heavy**. For GitHub/recruiters, it should communicate in the first 20–30 seconds:
 
-# Skylark BI — Monday.com Business Intelligence & AI Decision Intelligence Agent
+**What is it? → Why is it impressive? → How does it work? → Tech stack → Features → Demo → Architecture → Testing → Setup.**
 
-Skylark BI is an AI-powered Business Intelligence agent built for founders and executives to ask natural-language questions about business performance.
+I would replace the current README completely with this cleaner, recruiter-focused version:
 
-The application connects directly to **Monday.com** and analyzes two real-world business datasets:
+````markdown
+# Skylark BI — AI Business Intelligence & Decision Intelligence Agent
 
-- **Deals** — sales opportunities and pipeline
-- **Work Orders** — operational execution, billing, and receivables
+> **An AI-powered Business Intelligence platform that lets founders and executives ask natural-language questions about sales, operations, finance, and business performance — using live Monday.com data.**
 
-The system combines **deterministic Python analytics** with **Google Gemini** to provide grounded, executive-level answers while minimizing numerical hallucinations.
+[![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-App-red?logo=streamlit)](https://streamlit.io/)
+[![Pandas](https://img.shields.io/badge/Pandas-Analytics-150458?logo=pandas)](https://pandas.pydata.org/)
+[![Google Gemini](https://img.shields.io/badge/Google-Gemini-orange)](https://ai.google.dev/)
+[![Monday.com](https://img.shields.io/badge/Monday.com-GraphQL-6161FF)](https://developer.monday.com/api-reference/docs)
 
----
-
-## 🚀 Live Application
-
-> **Hosted Application:** `TODO — ADD DEPLOYED URL HERE`
-
-The application is designed as a Streamlit web application and can be accessed through a browser once deployed.
-
----
-
-# 1. Problem Statement
-
-Founders and executives often need quick answers to questions such as:
-
-- How is the business performing?
-- Which sector has the strongest pipeline?
-- What opportunities should we focus on?
-- How much money is outstanding?
-- Where are receivables concentrated?
-- Are there operational problems?
-- Which sectors have the most risk?
-- How much of the pipeline is likely to close?
-- What should leadership focus on this week?
-
-Answering these questions manually requires:
-
-1. Extracting data from Monday.com.
-2. Cleaning inconsistent business data.
-3. Combining information across multiple boards.
-4. Performing calculations and analysis.
-5. Interpreting the results.
-6. Preparing an executive-friendly response.
-
-Skylark BI automates this workflow through a conversational Business Intelligence agent.
+**Live Demo:** https://skylark-bi-agent-kuatxs6sq3uxbncst2r2ae.streamlit.app/  
+**Repository:** https://github.com/pmanojkumar1009/skylark-bi-agent
 
 ---
 
-# 2. Solution
+## Overview
 
-Skylark BI uses a hybrid architecture:
+Skylark BI is a **conversational Business Intelligence and Decision Intelligence platform** designed for founders and executives.
+
+Instead of manually opening dashboards, filtering spreadsheets, and calculating KPIs, users can simply ask questions such as:
+
+> **"Which sector has the biggest pipeline?"**
+
+> **"Where is our cash stuck?"**
+
+> **"Are there any operational risks?"**
+
+> **"Compare Mining and Renewables."**
+
+> **"What should I focus on this week?"**
+
+Skylark BI retrieves live business data from **Monday.com**, performs deterministic analytics using Python, and uses **Google Gemini** to convert verified metrics into concise executive-level insights.
+
+### Core principle
 
 ```text
-                    USER QUESTION
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │  Query Understanding │
-              │   & Intent Routing   │
-              └──────────┬──────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │   Monday.com API     │
-              │ Deals + Work Orders  │
-              └──────────┬──────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │ Data Cleaning &      │
-              │ Normalization        │
-              └──────────┬──────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │ Deterministic       │
-              │ Python Analytics    │
-              └──────────┬──────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │ Verified Metrics     │
-              │ & Business Context   │
-              └──────────┬──────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │ Google Gemini API    │
-              │ Natural Language AI  │
-              └──────────┬──────────┘
-                         │
-                         ▼
-              ┌─────────────────────┐
-              │ Numerical / Safety  │
-              │ Validation Layer    │
-              └──────────┬──────────┘
-                         │
-                         ▼
-                EXECUTIVE ANSWER
+Python calculates.
+Gemini explains.
 ````
 
-The important design principle is:
-
-> **Python performs the calculations. Gemini explains the verified results.**
-
-This prevents the LLM from being responsible for financial or operational calculations.
+This separation is intentional: **business-critical numbers are calculated deterministically rather than relying on an LLM to perform financial or operational calculations.**
 
 ---
 
-# 3. Key Features
+# Why Skylark BI?
 
-## 3.1 Monday.com Integration
-
-The application connects to Monday.com using its GraphQL API.
-
-It dynamically reads:
-
-* Deals board
-* Work Orders board
-
-The application does **not hardcode the provided CSV/XLSX data** as its source of truth.
-
-Data is retrieved directly from Monday.com.
-
-### Pagination
-
-The Monday.com client supports cursor-based pagination and retrieves data in batches.
-
-This allows the application to process boards containing hundreds of records rather than relying on a single API response.
-
----
-
-# 4. Data Resilience
-
-Real-world business data is often incomplete or inconsistent.
-
-Skylark BI performs data cleaning and normalization before analysis.
-
-Examples include:
-
-### Financial values
-
-Handles values such as:
+Traditional BI workflows often require users to:
 
 ```text
-₹10,000
-Rs. 10,000
-10,000
-10000
+Find the data
+     ↓
+Clean the data
+     ↓
+Build calculations
+     ↓
+Filter dashboards
+     ↓
+Interpret charts
+     ↓
+Make a decision
 ```
 
-and converts them into numeric values.
+Skylark BI turns that into:
 
-### Dates
+```text
+Ask a question
+     ↓
+Understand intent
+     ↓
+Retrieve live business data
+     ↓
+Calculate verified metrics
+     ↓
+Apply AI reasoning
+     ↓
+Receive an executive answer
+```
 
-Normalizes inconsistent date formats into a consistent internal representation.
+The goal is not simply to build another dashboard.
 
-### Sector names
-
-Normalizes inconsistent naming conventions so that related records can be analyzed together.
-
-### Missing values
-
-Missing:
-
-* Deal values
-* Probabilities
-* Dates
-* Statuses
-* Sector information
-
-are handled gracefully rather than causing the application to crash.
-
-The system also communicates important data-quality limitations to the user.
+The goal is to create a **decision-support layer on top of business data.**
 
 ---
 
-# 5. Business Intelligence Capabilities
+# Key Features
 
-The agent supports founder-level questions across several business areas.
+## 1. Live Monday.com Integration
 
-## Executive Business Health
+Skylark BI connects directly to Monday.com's GraphQL API.
 
-Examples:
+It works with two primary business datasets:
+
+* **Deals** — sales opportunities and pipeline
+* **Work Orders** — operational execution, billing, and receivables
+
+The application retrieves data dynamically rather than treating local CSV/XLSX files as the source of truth.
+
+### API capabilities
+
+* GraphQL API integration
+* Cursor-based pagination
+* Multi-board data retrieval
+* Error handling
+* Environment-based credentials
+* Live business data
+
+---
+
+# 2. Natural-Language Business Intelligence
+
+Users do not need to know SQL, Pandas, or dashboard filters.
+
+They can ask questions naturally.
+
+### Executive Questions
 
 ```text
 How are we doing?
@@ -191,115 +128,187 @@ How is the business performing?
 
 Give me a leadership update.
 
-What are the three most important things I need to know?
+What should I focus on this week?
+
+What's keeping me up at night?
 ```
 
----
-
-## Sales & Pipeline
-
-Examples:
+### Sales & Pipeline
 
 ```text
 Which sector has the biggest pipeline?
 
-Which sector is performing best?
-
-How much of the pipeline is actually likely to close?
+Which opportunities should we focus on?
 
 Are sales healthy?
 
-Which opportunities are most important?
+How much of the pipeline is likely to close?
+
+Which deals are most important?
 ```
 
-The system can calculate:
-
-* Open pipeline
-* Pipeline by sector
-* Pipeline by stage
-* Weighted pipeline
-* Opportunity values
-* Pipeline concentration
-* Top opportunities
-
----
-
-## Operational Performance
-
-Examples:
+### Operations
 
 ```text
-Should I be worried about anything on the operations side?
+Are there any operational problems?
 
 Are operations keeping up?
 
-Are there any operational problems I should know about?
+Which sector has the highest operational risk?
 ```
 
-The system analyzes:
-
-* Total work orders
-* Completed work orders
-* Open backlog
-* Delayed orders
-* Paused/stuck orders
-* Execution status distribution
-* Sector-level operational risk
-
----
-
-## Finance & Receivables
-
-Examples:
+### Finance
 
 ```text
 How much money is outstanding?
 
 Where is our cash stuck?
 
-Where should we focus our attention to improve cash flow?
-
 How much are we owed?
+
+Where are receivables concentrated?
 ```
 
-The system analyzes:
-
-* Contract value
-* Billed value
-* Invoiced value
-* Collected payments
-* Outstanding receivables
-* Collection efficiency
-* Receivables concentration
-
----
-
-## Sector Analysis
-
-The agent can compare sectors such as:
+### Sector Intelligence
 
 ```text
 Tell me about Mining.
 
-And Renewables?
+What about Renewables?
 
 Compare Mining and Renewables.
 
 Why is Renewables a risk?
 ```
 
-Sector analysis combines information from both:
+---
 
-* Deals
-* Work Orders
+# 3. Deterministic Analytics Engine
 
-to provide a broader business view.
+The application uses Python and Pandas for business calculations.
+
+The analytics layer provides capabilities including:
+
+* Pipeline analysis
+* Weighted pipeline
+* Pipeline by sector
+* Pipeline by stage
+* Revenue by sector
+* Top opportunities
+* Priority opportunities
+* Billing analysis
+* Receivables analysis
+* Operational risk
+* Work-order performance
+* Business health
+* Leadership KPIs
+* Data-quality analysis
+* Cross-board sector analysis
+
+This ensures that critical metrics are **reproducible and verifiable.**
 
 ---
 
-# 6. Conversational Follow-Ups
+# 4. AI-Powered Executive Reasoning
 
-The agent supports conversational follow-up questions.
+Google Gemini is used as the reasoning and explanation layer.
+
+Gemini does not receive responsibility for calculating the underlying business metrics.
+
+Instead:
+
+```text
+Monday.com
+    ↓
+Data Processing
+    ↓
+Deterministic Python Analytics
+    ↓
+Verified Business Metrics
+    ↓
+Google Gemini
+    ↓
+Executive Explanation
+```
+
+This allows the system to combine:
+
+* Numerical accuracy
+* Business reasoning
+* Natural-language interaction
+* Executive-friendly communication
+
+---
+
+# 5. Numerical Hallucination Guardrail
+
+A major challenge with AI-powered BI systems is **numerical hallucination**.
+
+An LLM may produce a plausible-looking number that does not actually exist in the source data.
+
+Skylark BI implements a validation layer to reduce this risk.
+
+### Validation flow
+
+```text
+Verified Metrics
+      ↓
+     Gemini
+      ↓
+Generated Response
+      ↓
+Numerical Validation
+      ↓
+ ┌────┴────┐
+ │         │
+Valid    Invalid
+ │         │
+ ▼         ▼
+Answer   Verified
+         Fallback
+```
+
+If the generated response contains unsupported numerical values, the system can reject the response and fall back to verified structured analytics.
+
+This makes the AI layer safer for business and financial questions.
+
+---
+
+# 6. Intelligent Fallback Mode
+
+Skylark BI does not completely depend on Gemini being available.
+
+If the LLM service is unavailable because of:
+
+* Missing API key
+* API failure
+* Rate limiting
+* Configuration problems
+
+the application can fall back to deterministic rule-based analytics.
+
+```text
+             Gemini Available?
+                  │
+          ┌───────┴───────┐
+         YES              NO
+          │                │
+          ▼                ▼
+      Gemini AI       Rule-Based
+      Explanation      Analytics
+          │                │
+          └───────┬────────┘
+                  ▼
+           Verified Answer
+```
+
+This improves application resilience.
+
+---
+
+# 7. Conversational Memory
+
+The agent supports multi-turn business conversations.
 
 For example:
 
@@ -308,45 +317,47 @@ User:
 Which sector has the biggest pipeline?
 
 Agent:
-Tender has the largest pipeline...
+Tender currently has the largest pipeline.
 
 User:
 Why?
 
 Agent:
-Tender dominates because...
+The main driver is the concentration of high-value
+opportunities in that sector.
 
 User:
 What about Mining?
 
 Agent:
-Mining currently has...
+Mining has a smaller pipeline but stronger operational
+activity...
 
 User:
 Why is that?
 
 Agent:
-The main driver is...
+The difference is primarily driven by...
 ```
 
-The application maintains structured conversation context including:
+The system maintains relevant conversational context such as:
 
 * Previous intent
-* Previous sector
+* Current sector
 * Comparison sectors
 * Previous analytical results
 * Recent conversation history
 
-This allows short queries such as:
+This allows short follow-up questions such as:
 
 ```text
 Why?
 
-Where is it concentrated?
-
 What about Mining?
 
 And Renewables?
+
+Where is it concentrated?
 
 What makes it so high?
 ```
@@ -355,206 +366,226 @@ to be interpreted in context.
 
 ---
 
-# 7. AI Architecture
+# 8. Data Resilience & Quality Handling
 
-The application uses **Google Gemini API** for natural-language reasoning.
+Real-world business data is rarely perfectly clean.
 
-Gemini receives structured, verified business metrics rather than directly performing raw-data calculations.
+Skylark BI includes normalization and defensive handling for inconsistent data.
 
-Example:
+### Financial values
 
-```text
-Monday.com
-     ↓
-Data Processing
-     ↓
-Python Analytics
-     ↓
-Verified Metrics
-     ↓
-Gemini
-     ↓
-Natural Language Explanation
-```
-
-This separation allows the system to combine:
-
-* Deterministic numerical analysis
-* LLM reasoning
-* Conversational interaction
-
----
-
-# 8. Numerical Safety Guardrail
-
-Financial and business intelligence systems cannot rely blindly on LLM-generated numbers.
-
-Skylark BI therefore implements a numerical validation layer.
-
-The system:
-
-1. Calculates metrics using Python.
-2. Creates a verified analytics context.
-3. Sends that context to Gemini.
-4. Checks numerical claims in the generated response.
-5. Prevents unsupported numerical outputs.
-6. Falls back to a verified analytics response when necessary.
-
-The goal is to ensure that important business numbers originate from deterministic calculations rather than being invented by the LLM.
-
----
-
-# 9. Fallback Mode
-
-The application includes a rule-based fallback architecture.
-
-If Gemini is:
-
-* unavailable
-* rate-limited
-* incorrectly configured
-* missing an API key
-
-the application can still return verified analytics using deterministic Python logic.
-
-For example:
+Handles formats such as:
 
 ```text
-Gemini API
-    │
-    ├── Available → Gemini-generated explanation
-    │
-    └── Unavailable → Verified rule-based analytics
+₹10,000
+Rs. 10,000
+10,000
+10000
 ```
 
-This ensures that the dashboard does not completely fail when the external LLM service is unavailable.
+### Probabilities
 
-> In production, the preferred path is **Google Gemini API**.
-> The fallback exists for resilience and development/testing.
-
----
-
-# 10. Intent Detection
-
-The query engine classifies natural-language questions into business intents.
-
-Examples include:
+Handles values such as:
 
 ```text
-executive_briefing
-executive_priorities
-sector_pipeline_ranking
-sector_performance
-pipeline_summary
-top_deals
-billing_summary
-receivables
-operational_risk
-cross_board_analysis
-compare_sectors
-data_quality
-delay_analysis
-follow_up
+High
+Medium
+Low
+80%
+0.8
+80
 ```
 
-The intent determines which deterministic analytics functions are executed.
+### Missing data
+
+The system safely handles missing:
+
+* Deal values
+* Probabilities
+* Dates
+* Statuses
+* Sector information
+* Operational fields
+
+### Data-quality awareness
+
+The application surfaces relevant limitations instead of silently assuming missing information is valid.
 
 ---
 
-# 11. Dashboard
+# 9. Business Intelligence Modules
 
-The application provides a Streamlit dashboard with multiple analytical views.
-
-### Executive Overview
-
-Provides an overall business health view.
-
-### Sales & Pipeline
-
-Shows pipeline and opportunity performance.
-
-### Operations
-
-Shows work-order execution and operational bottlenecks.
-
-### Finance
-
-Shows invoicing, collections, and outstanding receivables.
-
-### Sector Intelligence
-
-Provides sector-level analysis and comparisons.
-
-### Data Quality
-
-Highlights incomplete or inconsistent business records.
-
-### AI Business Assistant
-
-Provides the conversational interface for founder-level questions.
+| Module                | Purpose                                                |
+| --------------------- | ------------------------------------------------------ |
+| Executive Overview    | Overall business health and leadership KPIs            |
+| Sales & Pipeline      | Pipeline, opportunities, stages and sector performance |
+| Operations            | Work-order execution, delays and operational risks     |
+| Finance               | Billing, collections and receivables                   |
+| Sector Intelligence   | Cross-sector and cross-board analysis                  |
+| Data Quality          | Missing and inconsistent business data                 |
+| AI Business Assistant | Natural-language business questions                    |
 
 ---
 
-# 12. Project Structure
+# Architecture
+
+```text
+                         ┌──────────────────────┐
+                         │      Founder / User  │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │   Streamlit Dashboard│
+                         │   Conversational UI  │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │     Query Engine     │
+                         │ Intent + Context     │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │        Monday.com API         │
+                    │                               │
+                    │    Deals + Work Orders        │
+                    └───────────────┬───────────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │   Data Processing    │
+                         │ Cleaning + Normalize │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │  Python Analytics    │
+                         │  Deterministic Math  │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │  Verified Metrics    │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │   Google Gemini      │
+                         │   AI Reasoning       │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ Numerical Guardrail  │
+                         │ + Safety Validation  │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │  Executive Answer    │
+                         │ Insights + Tables    │
+                         └──────────────────────┘
+```
+
+---
+
+# Technology Stack
+
+| Technology                 | Role                            |
+| -------------------------- | ------------------------------- |
+| **Python**                 | Application and analytics logic |
+| **Streamlit**              | Interactive web dashboard       |
+| **Pandas**                 | Data processing and analytics   |
+| **Plotly**                 | Interactive visualizations      |
+| **Monday.com GraphQL API** | Live business data              |
+| **Google Gemini API**      | AI reasoning and explanation    |
+| **python-dotenv**          | Environment configuration       |
+| **unittest**               | Automated testing               |
+
+---
+
+# Project Structure
 
 ```text
 skylark-bi-agent/
 │
-├── .gitignore
-├── README.md
-├── DECISION_LOG.md
-├── requirements.txt
-├── main.py
-├── dashboard.py
+├── .devcontainer/
+│   └── devcontainer.json
 │
-├── test_analytics.py
+├── app/
+│   ├── __init__.py
+│   ├── ai_agent.py
+│   ├── analytics.py
+│   ├── config.py
+│   ├── data_processor.py
+│   ├── monday_client.py
+│   ├── query_engine.py
+│   │
+│   └── dashboard/
+│       ├── charts.py
+│       ├── chat.py
+│       ├── components.py
+│       ├── data_quality.py
+│       ├── drilldown.py
+│       ├── finance.py
+│       ├── operations.py
+│       ├── overview.py
+│       └── sales.py
+│
+├── dashboard.py
+├── main.py
+│
 ├── test_ai_agent.py
+├── test_analytics.py
 ├── test_connection.py
 ├── test_monday.py
 │
-└── app/
-    │
-    ├── __init__.py
-    ├── config.py
-    ├── monday_client.py
-    ├── data_processor.py
-    ├── analytics.py
-    ├── query_engine.py
-    ├── ai_agent.py
-    │
-    └── dashboard/
-        ├── __init__.py
-        ├── components.py
-        ├── charts.py
-        ├── overview.py
-        ├── sales.py
-        ├── operations.py
-        ├── finance.py
-        ├── drilldown.py
-        ├── data_quality.py
-        └── chat.py
+├── DECISION_LOG.md
+├── README.md
+├── requirements.txt
+└── .gitignore
 ```
 
 ---
 
-# 13. Technology Stack
+# Installation
 
-| Technology             | Purpose                                 |
-| ---------------------- | --------------------------------------- |
-| Python                 | Backend analytics and application logic |
-| Streamlit              | Web dashboard and conversational UI     |
-| Pandas                 | Data processing and analysis            |
-| Plotly                 | Interactive visualizations              |
-| Monday.com GraphQL API | Live business data source               |
-| Google Gemini API      | Natural-language reasoning              |
-| python-dotenv          | Environment configuration               |
-| unittest               | Automated testing                       |
+## 1. Clone the repository
+
+```bash
+git clone https://github.com/pmanojkumar1009/skylark-bi-agent.git
+cd skylark-bi-agent
+```
+
+## 2. Create a virtual environment
+
+### Windows
+
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+### macOS / Linux
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+## 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
 
 ---
 
-# 14. Environment Variables
+# Configuration
 
-Create a `.env` file in the project root.
+Create a `.env` file in the project root:
 
 ```env
 MONDAY_API_TOKEN=your_monday_api_token
@@ -563,11 +594,11 @@ WORK_ORDERS_BOARD_ID=your_work_orders_board_id
 GEMINI_API_KEY=your_google_gemini_api_key
 ```
 
-### Important
+### Security
 
-Never commit `.env` to GitHub.
+Credentials are **never stored in source code**.
 
-The repository `.gitignore` includes:
+The `.env` file is excluded from Git:
 
 ```text
 .env
@@ -577,78 +608,11 @@ __pycache__/
 venv/
 ```
 
----
-
-# 15. Installation
-
-## Clone the Repository
-
-```bash
-git clone https://github.com/pmanojkumar1009/skylark-bi-agent.git
-cd skylark-bi-agent
-```
+Never commit API keys or other secrets to GitHub.
 
 ---
 
-## Create a Virtual Environment
-
-### Windows
-
-```powershell
-python -m venv .venv
-.venv\Scripts\activate
-```
-
-### macOS/Linux
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
----
-
-## Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-# 16. Configure Monday.com
-
-The application requires two Monday.com boards:
-
-### Board 1 — Deals
-
-Contains sales pipeline information such as:
-
-* Deal name
-* Sector
-* Deal value
-* Stage
-* Probability
-* Owner
-* Dates
-
-### Board 2 — Work Orders
-
-Contains operational information such as:
-
-* Work order
-* Sector
-* Order value
-* Billing information
-* Payment information
-* Execution status
-* Dates
-
-The application reads the boards dynamically using the Monday.com API.
-
----
-
-# 17. Run the Application Locally
+# Running the Application
 
 Start the Streamlit dashboard:
 
@@ -656,7 +620,7 @@ Start the Streamlit dashboard:
 python -m streamlit run dashboard.py
 ```
 
-The application will normally be available at:
+The application will normally open at:
 
 ```text
 http://localhost:8501
@@ -664,9 +628,9 @@ http://localhost:8501
 
 ---
 
-# 18. Run the CLI
+# CLI
 
-The project also provides a command-line interface.
+The project also provides a command-line interface:
 
 ```bash
 python -X utf8 main.py
@@ -674,122 +638,158 @@ python -X utf8 main.py
 
 ---
 
-# 19. Run Automated Tests
+# Testing
 
-Run the analytics and AI-agent tests:
+Skylark BI includes automated tests covering analytics, AI behavior, routing, resilience, and data handling.
 
-```bash
-python -X utf8 -m unittest test_analytics.py test_ai_agent.py -v
-```
-
-Additional integration tests:
+Run the complete test suite:
 
 ```bash
-python -X utf8 -m unittest test_connection.py test_monday.py -v
+python -X utf8 -m unittest discover -v
 ```
 
-The test suite covers:
+### Current test result
 
-* Analytics calculations
+```text
+Ran 40 tests
+OK
+```
+
+The tests cover:
+
+* Business health calculations
+* Pipeline calculations
+* Sector performance
+* Cross-board analytics
+* Revenue analysis
+* Billing calculations
+* Receivables
+* Operational risk
+* Priority opportunities
 * Query routing
-* Natural-language queries
+* Natural-language questions
+* Founder/executive questions
 * Conversational follow-ups
-* Sector analysis
-* Pipeline analysis
-* Billing analysis
-* Operational analysis
-* Cross-board analysis
+* LLM fallback behavior
+* Numerical hallucination prevention
 * Data-quality handling
-* Fallback behavior
-* Numerical safety
+* Mixed-type probability values
+* Empty datasets
 
 ---
 
-# 20. Example Questions
+# Example User Journey
 
-The following are examples of questions the agent can answer:
+### Question
 
 ```text
-How are we doing?
-
-How is the business performing?
-
 Which sector has the biggest pipeline?
-
-Why is Tender so high?
-
-What about Mining?
-
-Tell me about Renewables.
-
-Why is Renewables a risk?
-
-Are there any operational problems I should know about?
-
-Should I be worried about anything on the operations side?
-
-What deals should I pay attention to?
-
-Which opportunities are most important for us to win?
-
-How much money is outstanding?
-
-Where is it concentrated?
-
-Where is our cash stuck?
-
-How much are we owed?
-
-Are sales healthy?
-
-Are operations keeping up?
-
-What's keeping me up at night?
-
-Where should I put my attention?
-
-Which sector is performing best?
-
-Compare Mining and Renewables.
-
-How much of the pipeline is actually likely to close?
 ```
 
----
-
-# 21. Data Quality Considerations
-
-The underlying business data contains incomplete and inconsistent records.
-
-Examples include:
-
-* Missing deal values
-* Missing probabilities
-* Missing dates
-* Inconsistent sector names
-* Different financial formats
-* Missing operational fields
-
-The system does not silently assume that incomplete information is complete.
-
-Instead, the application surfaces relevant caveats to the user.
-
-For example:
+### Processing
 
 ```text
-Data Quality Note:
-A significant portion of opportunities does not contain an explicit
-probability. Weighted pipeline calculations should therefore be
-interpreted with caution.
+Natural Language
+       ↓
+Intent Detection
+       ↓
+Sector Pipeline Analytics
+       ↓
+Monday.com Deals Data
+       ↓
+Deterministic Calculation
+       ↓
+Verified Metrics
+       ↓
+Gemini Explanation
+```
+
+### Result
+
+The user receives a concise executive explanation instead of raw data or a complicated query.
+
+---
+
+# Design Philosophy
+
+The most important architectural decision in Skylark BI is the separation between **calculation** and **reasoning**.
+
+```text
+┌──────────────────────────────┐
+│ Python                       │
+│                              │
+│ • Data processing            │
+│ • Financial calculations     │
+│ • KPI calculations           │
+│ • Aggregations               │
+│ • Ranking                    │
+│ • Validation                 │
+└──────────────┬───────────────┘
+               │
+               ▼
+       Verified Metrics
+               │
+               ▼
+┌──────────────────────────────┐
+│ Google Gemini                │
+│                              │
+│ • Explanation                │
+│ • Context                    │
+│ • Reasoning                  │
+│ • Conversational responses   │
+└──────────────────────────────┘
+```
+
+This design provides a better balance between:
+
+* Accuracy
+* Explainability
+* Resilience
+* Natural-language interaction
+* Business usability
+
+---
+
+# Reliability & Error Handling
+
+Skylark BI is designed to fail gracefully.
+
+### Monday.com API failure
+
+API failures are handled without unnecessarily crashing the dashboard.
+
+### Gemini failure
+
+The application can fall back to deterministic analytics.
+
+### Invalid or ambiguous question
+
+The agent can request clarification instead of inventing an answer.
+
+### Missing business data
+
+Missing values are handled safely and relevant data-quality limitations can be surfaced.
+
+### Unexpected data types
+
+Analytics functions are defensive against values such as:
+
+```text
+None
+NaN
+pd.NA
+integers
+floats
+strings
+percentages
+unexpected values
 ```
 
 ---
 
-# 22. Security
+# Security Considerations
 
-Sensitive credentials are never stored directly in source code.
-
-The application uses environment variables for:
+The application uses environment variables for sensitive credentials:
 
 ```text
 MONDAY_API_TOKEN
@@ -798,244 +798,99 @@ WORK_ORDERS_BOARD_ID
 GEMINI_API_KEY
 ```
 
-The `.env` file is excluded from Git using `.gitignore`.
+Secrets are excluded from Git using `.gitignore`.
 
-Before pushing the repository, verify:
+Before pushing changes:
 
 ```bash
 git status
 ```
 
-and ensure that `.env` is not listed.
+Verify that `.env` is not listed.
 
 ---
 
-# 23. Error Handling
+# Future Improvements
 
-The application is designed to handle common failures gracefully.
+Potential future extensions include:
 
-### Monday.com API Failure
-
-The application catches API errors and prevents the dashboard from crashing.
-
-### Gemini API Failure
-
-The application switches to verified rule-based analytics.
-
-### Missing Data
-
-Missing values are handled during processing and appropriate caveats are shown.
-
-### Invalid Queries
-
-Ambiguous queries can result in clarification prompts instead of fabricated answers.
-
----
-
-# 24. Design Decisions
-
-The major architectural decision was to avoid making the LLM responsible for business calculations.
-
-Instead:
-
-```text
-Python = calculations
-Gemini = reasoning and explanation
-```
-
-This approach provides a balance between:
-
-* Numerical accuracy
-* Explainability
-* Conversational interaction
-* Resilience
-
-More detailed assumptions, trade-offs, limitations, and future improvements are documented in:
-
-```text
-DECISION_LOG.md
-```
-
----
-
-# 25. Future Improvements
-
-With additional development time, the platform could be extended with:
-
-* More advanced semantic intent detection
-* Better entity resolution across Monday.com boards
-* Automated scheduled leadership reports
-* Historical trend analysis
-* Forecasting models
-* More sophisticated probability estimation
+* Historical business trend analysis
 * Revenue forecasting
+* Predictive pipeline forecasting
 * Automated anomaly detection
+* Scheduled executive reports
+* Risk alerts
 * Role-based access control
 * Authentication
-* Production database/cache
-* More advanced LLM evaluation
+* Production caching/database layer
+* Advanced semantic search
+* More sophisticated entity resolution
+* LLM evaluation pipelines
 * Streaming AI responses
-* Automated alerts for operational and financial risks
+* Automated business alerts
 
 ---
 
-# 26. Deployment
+# Assignment Deliverables
 
-The application can be deployed using a Python-compatible hosting platform.
+This project was developed as part of the **Skylark Drones Monday.com Business Intelligence Agent assignment**.
 
-The deployment must provide the following environment variables:
+The implementation includes:
 
-```text
-MONDAY_API_TOKEN
-DEALS_BOARD_ID
-WORK_ORDERS_BOARD_ID
-GEMINI_API_KEY
-```
-
-After deployment, update the Live Application section at the top of this README:
-
-```text
-Hosted Application: https://your-deployed-url
-```
-
-The hosted application should be publicly accessible for assignment evaluation.
-
----
-
-# 27. Assignment Deliverables
-
-This project was developed for the **Skylark Drones Monday.com Business Intelligence Agent assignment**.
-
-The implementation addresses the major assignment requirements:
-
-### Monday.com Integration
-
-Live read-only integration with Monday.com using the GraphQL API.
-
-### Data Resilience
-
-Cleaning, normalization, missing-value handling, and data-quality warnings.
-
-### Query Understanding
-
-Natural-language intent detection and conversational follow-ups.
-
-### Business Intelligence
-
-Founder-level analysis across:
-
-* Sales
-* Pipeline
-* Operations
-* Finance
-* Receivables
-* Sector performance
-
-### AI Agent
-
-Google Gemini-powered natural-language explanations grounded in deterministic analytics.
-
-### Leadership Support
-
-Executive summaries, priorities, risks, and decision-focused insights.
+* Live Monday.com integration
+* Deals and Work Orders analysis
+* Data cleaning and normalization
+* Natural-language query understanding
+* Deterministic business analytics
+* Cross-board sector analysis
+* Google Gemini integration
+* Numerical hallucination protection
+* Rule-based fallback
+* Conversational follow-ups
+* Executive-level insights
+* Interactive Streamlit dashboard
+* Automated test coverage
+* Architecture and design documentation
 
 ---
 
-# 28. Submission
+# Links
+
+### Live Application
+
+[https://skylark-bi-agent-kuatxs6sq3uxbncst2r2ae.streamlit.app/](https://skylark-bi-agent-kuatxs6sq3uxbncst2r2ae.streamlit.app/)
 
 ### GitHub Repository
 
-```text
-https://github.com/pmanojkumar1009/skylark-bi-agent
-```
+[https://github.com/pmanojkumar1009/skylark-bi-agent](https://github.com/pmanojkumar1009/skylark-bi-agent)
 
-### Hosted Application
-
-```text
-TODO — ADD DEPLOYED URL
-```
-
-### Decision Log
-
-```text
-DECISION_LOG.md
-```
-
-The repository contains the source code, setup instructions, tests, architecture documentation, and decision log required for evaluation.
-
----
-
-# 29. Author
+### Author
 
 **Manojkumar**
 
 GitHub:
-
-```text
-https://github.com/pmanojkumar1009
-```
+[https://github.com/pmanojkumar1009](https://github.com/pmanojkumar1009)
 
 ---
 
-## Final Architecture
+# Project Highlights
 
 ```text
-                  ┌──────────────────────┐
-                  │      Founder/User    │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │ Streamlit Dashboard  │
-                  │  Conversational UI   │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │ Query Engine         │
-                  │ Intent + Context     │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-              ┌──────────────────────────────┐
-              │       Monday.com API         │
-              │                              │
-              │  Deals       Work Orders     │
-              └──────────────┬───────────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │ Data Processing      │
-                  │ Cleaning/Normalize   │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │ Python Analytics     │
-                  │ Deterministic Math  │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │ Verified Metrics     │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │ Google Gemini API    │
-                  │ AI Reasoning         │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │ Numerical Guardrail  │
-                  │ + Safety Validation  │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │ Executive Answer     │
-                  │ Tables + Insights    │
-                  └──────────────────────┘
+┌─────────────────────────────────────────────┐
+│             SKYLARK BI                      │
+├─────────────────────────────────────────────┤
+│                                             │
+│  Live Monday.com Business Data              │
+│              ↓                              │
+│  Deterministic Python Analytics             │
+│              ↓                              │
+│  Verified Business Metrics                  │
+│              ↓                              │
+│  Google Gemini Reasoning                    │
+│              ↓                              │
+│  Numerical Safety Validation                │
+│              ↓                              │
+│  Executive Decision Intelligence            │
+│                                             │
+└─────────────────────────────────────────────┘
 ```
-
