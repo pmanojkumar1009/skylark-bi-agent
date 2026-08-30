@@ -11,10 +11,12 @@ from app.query_engine import (
     format_analytics_context
 )
 
+
 def format_currency(val) -> str:
     """Format numeric values as INR currency."""
     if val is None or pd.isna(val):
         return "Unknown"
+
     try:
         return f"₹{float(val):,.2f}"
     except (ValueError, TypeError):
@@ -27,191 +29,524 @@ def format_currency(val) -> str:
 
 class LLMClient:
     """
-    Provider-agnostic interface for invoking Gemini or OpenAI LLMs.
-    Supports dynamic model discovery, health verification, and transparent error reporting.
+    Provider-agnostic interface for Gemini / OpenAI.
+
+    Gemini is configured without making a startup API request.
+    This prevents consuming Gemini quota just to verify the key.
     """
+
     def __init__(self):
-        self.gemini_key = GEMINI_API_KEY or os.getenv("GOOGLE_API_KEY")
+        # ----------------------------------------------------
+        # API KEYS
+        # ----------------------------------------------------
+        self.gemini_key = (
+            GEMINI_API_KEY
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+        )
+
         self.openai_key = os.getenv("OPENAI_API_KEY")
+
+        # ----------------------------------------------------
+        # Runtime state
+        # ----------------------------------------------------
+        self.client = None
         self.provider = None
+        self.model_name = None
         self.active_model = None
+
         self.connection_status = "Disconnected"
         self.connection_error = None
-        self._call_timestamps = []  # timestamps of recent calls for rate limiting
 
-        # Check and configure Gemini
+        self._call_timestamps = []
+
+        # ----------------------------------------------------
+        # PROVIDER SELECTION
+        # ----------------------------------------------------
+        #
+        # Gemini is preferred when GEMINI_API_KEY exists.
+        #
         if self.gemini_key:
-            try:
-                from google import genai
-                from google.genai import types
-                self.client = genai.Client(api_key=self.gemini_key)
+            self._configure_gemini()
 
-                # Prioritize configured model or active flash models in order
-                env_model = os.getenv("GEMINI_MODEL")
-                candidate_models = [env_model] if env_model else [
-                    "gemini-3.5-flash",
-                    "gemini-3.6-flash",
-                    "gemini-3.7-flash",
-                    "gemini-flash-latest",
-                    "gemini-2.5-pro",
-                ]
-
-                connected = False
-                last_err = None
-                for model in candidate_models:
-                    if not model:
-                        continue
-                    try:
-                        resp = self.client.models.generate_content(
-                            model=model,
-                            contents="ping",
-                            config=types.GenerateContentConfig(max_output_tokens=5)
-                        )
-                        self.model_name = model
-                        self.active_model = model
-                        self.provider = "gemini"
-                        self.connection_status = "Connected"
-                        self.connection_error = None
-                        connected = True
-                        print(f"[LLM] Gemini Connection Verified. Active model: {self.model_name}")
-                        break
-                    except Exception as me:
-                        last_err = me
-                        print(f"[LLM] Model '{model}' check failed: {me}")
-
-                if not connected:
-                    safe_err = str(last_err)
-                    if "401" in safe_err or "API_KEY_INVALID" in safe_err:
-                        self.connection_error = "401: Invalid API Key"
-                    elif "429" in safe_err or "RESOURCE_EXHAUSTED" in safe_err:
-                        self.connection_error = "429: Quota Exceeded"
-                    elif "404" in safe_err or "NOT_FOUND" in safe_err:
-                        self.connection_error = "404: Model Unavailable"
-                    elif "503" in safe_err or "UNAVAILABLE" in safe_err:
-                        self.connection_error = "503: Service Unavailable"
-                    else:
-                        self.connection_error = f"{type(last_err).__name__}"
-                    self.connection_status = "Fallback"
-                    self.provider = None
-                    print(f"[LLM] Gemini verification failed: {self.connection_error}. Running in Rule-Based Fallback Mode.")
-
-            except Exception as e:
-                self.connection_error = f"{type(e).__name__}"
-                self.connection_status = "Fallback"
-                self.provider = None
-                print(f"[LLM] Gemini initialization failed: {e}. Running in Rule-Based Fallback Mode.")
-
-        # Check and configure OpenAI
         elif self.openai_key:
-            try:
-                from openai import OpenAI
-                self.client = OpenAI(
-                    api_key=self.openai_key,
-                    base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-                )
-                self.model_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-                self.active_model = self.model_name
-                # Quick verification call
-                self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[{"role": "user", "content": "ping"}],
-                    max_tokens=1
-                )
-                self.provider = "openai"
-                self.connection_status = "Connected"
-                self.connection_error = None
-                print(f"[LLM] OpenAI Connection Verified. Active model: {self.model_name}")
-            except Exception as e:
-                self.connection_error = f"{type(e).__name__}"
-                self.connection_status = "Fallback"
-                self.provider = None
-                print(f"[LLM] OpenAI verification failed: {e}. Running in Rule-Based Fallback Mode.")
+            self._configure_openai()
 
         else:
             self.connection_status = "Fallback"
             self.connection_error = "No API Key Provided"
-            print("[LLM] WARNING: No LLM API Key found (GEMINI_API_KEY or OPENAI_API_KEY). Running in Rule-Based Mode.")
+            self.provider = None
+
+            print(
+                "[LLM] WARNING: No LLM API Key found. "
+                "Running in Rule-Based Mode."
+            )
+
+    # ========================================================
+    # GEMINI CONFIGURATION
+    # ========================================================
+
+    def _configure_gemini(self):
+        """
+        Configure Gemini without making a generate_content()
+        verification request.
+
+        IMPORTANT:
+        A startup 'ping' request consumes Gemini API quota.
+        """
+
+        try:
+            from google import genai
+
+            self.client = genai.Client(
+                api_key=self.gemini_key
+            )
+
+            # ------------------------------------------------
+            # Use ONE model only.
+            #
+            # Can be overridden with:
+            #
+            # GEMINI_MODEL=gemini-2.5-flash
+            #
+            # ------------------------------------------------
+            self.model_name = os.getenv(
+                "GEMINI_MODEL",
+                "gemini-2.5-flash"
+            )
+
+            self.active_model = self.model_name
+            self.provider = "gemini"
+
+            # "Configured" means the client was initialized.
+            # We deliberately do NOT call the API here.
+            self.connection_status = "Configured"
+            self.connection_error = None
+
+            print(
+                f"[LLM] Gemini configured: "
+                f"{self.model_name}"
+            )
+
+        except Exception as e:
+            self.client = None
+            self.provider = None
+            self.model_name = None
+            self.active_model = None
+
+            self.connection_status = "Fallback"
+            self.connection_error = (
+                f"{type(e).__name__}: {e}"
+            )
+
+            print(
+                f"[LLM] Gemini initialization failed: {e}. "
+                "Running in Rule-Based Fallback Mode."
+            )
+
+    # ========================================================
+    # OPENAI CONFIGURATION
+    # ========================================================
+
+    def _configure_openai(self):
+        """
+        Configure OpenAI without making a startup API request.
+        """
+
+        try:
+            from openai import OpenAI
+
+            self.client = OpenAI(
+                api_key=self.openai_key,
+                base_url=os.getenv(
+                    "OPENAI_BASE_URL",
+                    "https://api.openai.com/v1"
+                )
+            )
+
+            self.model_name = os.getenv(
+                "OPENAI_MODEL",
+                "gpt-4o-mini"
+            )
+
+            self.active_model = self.model_name
+            self.provider = "openai"
+
+            self.connection_status = "Configured"
+            self.connection_error = None
+
+            print(
+                f"[LLM] OpenAI configured: "
+                f"{self.model_name}"
+            )
+
+        except Exception as e:
+            self.client = None
+            self.provider = None
+            self.model_name = None
+            self.active_model = None
+
+            self.connection_status = "Fallback"
+            self.connection_error = (
+                f"{type(e).__name__}: {e}"
+            )
+
+            print(
+                f"[LLM] OpenAI initialization failed: {e}. "
+                "Running in Rule-Based Fallback Mode."
+            )
+
+    # ========================================================
+    # CLIENT-SIDE RATE LIMITING
+    # ========================================================
 
     def _enforce_rate_limit(self):
-        """Simple client‑side rate limiting for free‑tier Gemini.
-        Tracks timestamps of recent calls and sleeps if limit exceeded.
         """
+        Lightweight client-side rate limiter.
+
+        This prevents accidental bursts of requests.
+        It does NOT increase Google's API quota.
+        """
+
         import time
+
         now = time.time()
-        # Keep only calls within the last 60 seconds
-        self._call_timestamps = [t for t in self._call_timestamps if now - t < 60]
-        if len(self._call_timestamps) >= 10:
-            sleep_time = 60 - (now - self._call_timestamps[0]) + 0.5
-            print(f"[LLM] Rate limit threshold reached, sleeping {sleep_time:.1f}s")
-            time.sleep(sleep_time)
+
+        # Keep calls from the last 60 seconds
+        self._call_timestamps = [
+            timestamp
+            for timestamp in self._call_timestamps
+            if now - timestamp < 60
+        ]
+
+        # Local safety threshold
+        max_calls_per_minute = 10
+
+        if len(self._call_timestamps) >= max_calls_per_minute:
+
+            sleep_time = (
+                60
+                - (now - self._call_timestamps[0])
+                + 0.5
+            )
+
+            if sleep_time > 0:
+                print(
+                    "[LLM] Local rate limit reached. "
+                    f"Waiting {sleep_time:.1f}s..."
+                )
+
+                time.sleep(sleep_time)
+
             now = time.time()
-            self._call_timestamps = [t for t in self._call_timestamps if now - t < 60]
+
+            self._call_timestamps = [
+                timestamp
+                for timestamp in self._call_timestamps
+                if now - timestamp < 60
+            ]
+
         self._call_timestamps.append(time.time())
 
+    # ========================================================
+    # RESPONSE TEXT EXTRACTION
+    # ========================================================
+
     def _extract_text(self, response: Any) -> str:
-        """Safely extract generated text from Gemini or other response objects."""
+        """
+        Safely extract generated text from Gemini response.
+        """
+
         if response is None:
             return ""
-        if hasattr(response, "text") and response.text:
-            return response.text.strip()
-        if hasattr(response, "candidates") and response.candidates:
-            parts = []
-            for cand in response.candidates:
-                if hasattr(cand, "content") and hasattr(cand.content, "parts"):
-                    for p in cand.content.parts:
-                        if hasattr(p, "text") and p.text:
-                            parts.append(p.text)
-            if parts:
-                return "".join(parts).strip()
+
+        # ----------------------------------------------------
+        # Direct response.text
+        # ----------------------------------------------------
+        try:
+            text = getattr(
+                response,
+                "text",
+                None
+            )
+
+            if text:
+                return str(text).strip()
+
+        except Exception:
+            pass
+
+        # ----------------------------------------------------
+        # Fallback: candidates -> content -> parts
+        # ----------------------------------------------------
+        try:
+            candidates = getattr(
+                response,
+                "candidates",
+                None
+            )
+
+            if candidates:
+
+                parts_text = []
+
+                for candidate in candidates:
+
+                    content = getattr(
+                        candidate,
+                        "content",
+                        None
+                    )
+
+                    if content is None:
+                        continue
+
+                    parts = getattr(
+                        content,
+                        "parts",
+                        None
+                    )
+
+                    if not parts:
+                        continue
+
+                    for part in parts:
+
+                        text = getattr(
+                            part,
+                            "text",
+                            None
+                        )
+
+                        if text:
+                            parts_text.append(
+                                str(text)
+                            )
+
+                if parts_text:
+                    return "".join(
+                        parts_text
+                    ).strip()
+
+        except Exception:
+            pass
+
         return ""
 
-    def call_llm(self, system_instruction: str, prompt: str, json_mode: bool = False) -> str:
+    # ========================================================
+    # CALL LLM
+    # ========================================================
+
+    def call_llm(
+        self,
+        system_instruction: str,
+        prompt: str,
+        json_mode: bool = False
+    ) -> str:
         """
-        Invoke the configured LLM API. Throws ValueError if no API key is configured.
+        Invoke the configured LLM.
+
+        Raises:
+            ValueError:
+                When no provider is configured.
+
+            RuntimeError:
+                When the configured provider returns an error.
         """
-        if not self.provider:
-            raise ValueError("No LLM provider configured.")
-        # Enforce rate limiting before making the request
+
+        if not self.provider or not self.client:
+            raise ValueError(
+                "No LLM provider configured."
+            )
+
+        # ----------------------------------------------------
+        # Local rate limiting
+        # ----------------------------------------------------
         self._enforce_rate_limit()
 
+        # ====================================================
+        # GEMINI
+        # ====================================================
+
         if self.provider == "gemini":
-            from google import genai
-            from google.genai import types
 
-            config = types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.0
-            )
-            if json_mode:
-                config.response_mime_type = "application/json"
+            try:
+                from google.genai import types
 
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=config
-            )
-            return self._extract_text(response)
+                config_kwargs = {
+                    "system_instruction": system_instruction,
+                    "temperature": 0.0,
+                }
+
+                # JSON output when requested
+                if json_mode:
+                    config_kwargs[
+                        "response_mime_type"
+                    ] = "application/json"
+
+                config = types.GenerateContentConfig(
+                    **config_kwargs
+                )
+
+                response = (
+                    self.client
+                    .models
+                    .generate_content(
+                        model=self.model_name,
+                        contents=prompt,
+                        config=config
+                    )
+                )
+
+                text = self._extract_text(
+                    response
+                )
+
+                if not text:
+                    raise RuntimeError(
+                        "Gemini returned an empty response."
+                    )
+
+                return text
+
+            except Exception as e:
+
+                error_text = str(e)
+
+                # ------------------------------------------------
+                # QUOTA
+                # ------------------------------------------------
+                if (
+                    "429" in error_text
+                    or "RESOURCE_EXHAUSTED" in error_text
+                ):
+                    self.connection_error = (
+                        "Gemini quota exceeded"
+                    )
+
+                # ------------------------------------------------
+                # INVALID API KEY
+                # ------------------------------------------------
+                elif (
+                    "401" in error_text
+                    or "API_KEY_INVALID" in error_text
+                ):
+                    self.connection_error = (
+                        "Gemini API key invalid"
+                    )
+
+                # ------------------------------------------------
+                # MODEL NOT FOUND
+                # ------------------------------------------------
+                elif (
+                    "404" in error_text
+                    or "NOT_FOUND" in error_text
+                ):
+                    self.connection_error = (
+                        f"Gemini model unavailable: "
+                        f"{self.model_name}"
+                    )
+
+                # ------------------------------------------------
+                # TEMPORARY SERVICE ERROR
+                # ------------------------------------------------
+                elif (
+                    "503" in error_text
+                    or "UNAVAILABLE" in error_text
+                ):
+                    self.connection_error = (
+                        "Gemini service temporarily unavailable"
+                    )
+
+                # ------------------------------------------------
+                # OTHER ERROR
+                # ------------------------------------------------
+                else:
+                    self.connection_error = (
+                        f"{type(e).__name__}: {e}"
+                    )
+
+                print(
+                    "[LLM] Gemini request failed: "
+                    f"{self.connection_error}"
+                )
+
+                raise RuntimeError(
+                    self.connection_error
+                ) from e
+
+        # ====================================================
+        # OPENAI
+        # ====================================================
 
         elif self.provider == "openai":
-            messages = [
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": prompt}
-            ]
-            kwargs = {
-                "model": self.model_name,
-                "messages": messages,
-                "temperature": 0.0
-            }
-            if json_mode:
-                kwargs["response_format"] = {"type": "json_object"}
 
-            response = self.client.chat.completions.create(**kwargs)
-            return response.choices[0].message.content.strip()
+            try:
+                messages = [
+                    {
+                        "role": "system",
+                        "content": system_instruction
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
 
-        return ""
+                kwargs = {
+                    "model": self.model_name,
+                    "messages": messages,
+                    "temperature": 0.0
+                }
 
+                if json_mode:
+                    kwargs["response_format"] = {
+                        "type": "json_object"
+                    }
 
+                response = (
+                    self.client
+                    .chat
+                    .completions
+                    .create(**kwargs)
+                )
 
+                content = (
+                    response
+                    .choices[0]
+                    .message
+                    .content
+                )
+
+                if not content:
+                    raise RuntimeError(
+                        "OpenAI returned an empty response."
+                    )
+
+                return content.strip()
+
+            except Exception as e:
+
+                self.connection_error = (
+                    f"{type(e).__name__}: {e}"
+                )
+
+                print(
+                    "[LLM] OpenAI request failed: "
+                    f"{self.connection_error}"
+                )
+
+                raise RuntimeError(
+                    self.connection_error
+                ) from e
+
+        # ====================================================
+        # UNKNOWN PROVIDER
+        # ====================================================
+
+        raise ValueError(
+            f"Unsupported LLM provider: {self.provider}"
+        )
 
 
 # ============================================================
