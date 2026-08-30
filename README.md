@@ -1,6 +1,4 @@
-Absolutely. Since you **haven’t deployed yet**, your README should not claim a hosted link. Use this **copy-paste-ready README** now; after deployment, you only need to fill in the hosted URL.
 
-````markdown
 # Skylark BI — Monday.com Business Intelligence & AI Decision Intelligence Agent
 
 Skylark BI is an AI-powered Business Intelligence agent built for founders and executives to ask natural-language questions about business performance.
