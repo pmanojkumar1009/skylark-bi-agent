@@ -695,12 +695,16 @@ class TestBIAgent(unittest.TestCase):
         self.assertIn("Mining Deal 1", resp_biggest)
 
     def test_gemini_client_configuration_and_fallback(self):
-        """Verify LLMClient initialization, model candidate fallback, and error recording."""
-        # When no keys configured
+        """Verify LLMClient falls back when no API keys are configured."""
+        import app.ai_agent as ai_agent_module
+
         with patch.dict("os.environ", {}, clear=True):
-            client = LLMClient()
-            self.assertIsNone(client.provider)
-            self.assertEqual(client.connection_status, "Fallback")
+            with patch.object(ai_agent_module, "GEMINI_API_KEY", None):
+                client = LLMClient()
+
+                self.assertIsNone(client.provider)
+                self.assertEqual(client.connection_status, "Fallback")
+                self.assertEqual(client.connection_error, "No API Key Provided")
 
     def test_dashboard_html_no_literal_div(self):
         """Verify that dashboard overview HTML does not contain unclosed or malformed div tags."""

@@ -89,92 +89,235 @@ def clean_work_orders_df(df: Any) -> pd.DataFrame:
 def get_pipeline_summary(deals_df: pd.DataFrame) -> Dict[str, Any]:
     """
     Calculate high-level Deals pipeline metrics.
+
+    Metrics include:
+    - Total deals and portfolio value
+    - Open, won, lost/dead and on-hold deals
+    - Average closure probability for active deals
+    - Probability-weighted active pipeline value
+    - Deals with/missing closure probability
     """
+
     df = clean_deals_df(deals_df)
-    
+
+    # --------------------------------------------------------
+    # Empty dataset
+    # --------------------------------------------------------
     if df.empty:
         return {
             "total_deals": 0,
             "total_portfolio_value": 0.0,
+
             "open_deals_count": 0,
             "open_pipeline_value": 0.0,
+
             "won_deals_count": 0,
             "won_deals_value": 0.0,
+
             "dead_deals_count": 0,
             "dead_deals_value": 0.0,
+
             "on_hold_deals_count": 0,
             "on_hold_pipeline_value": 0.0,
+
             "avg_closure_probability": 0.0,
             "weighted_pipeline_value": 0.0,
+
             "deals_missing_probability": 0,
-            "deals_with_probability": 0
+            "deals_with_probability": 0,
         }
 
-    # Normalize values for mapping
+    # --------------------------------------------------------
+    # Normalize status
+    # --------------------------------------------------------
     status_series = df["deal_status"].apply(normalize_text)
-    status_lower = status_series.str.lower()
-    
-    prob_series = df["closure_probability"].apply(normalize_text)
-    val_series = df["deal_value"].fillna(0.0)
-    
-    # Map probability to numeric
-    prob_numeric = prob_series.apply(
-        lambda x: CLOSURE_PROBABILITY_MAPPING.get(x.lower()) if x else None
+
+    status_lower = (
+        status_series
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
     )
-    
-    # Identify stages/statuses (case-insensitive)
-    is_open = status_lower.isin(["open", "open deal"]) | status_series.isna()
-    is_won = status_lower == "won"
-    is_dead = status_lower.isin(["dead", "lost"])
-    is_hold = status_lower == "on hold"
-    
-    # Metrics
-    total_deals = len(df)
-    total_portfolio_value = val_series.sum()
-    
-    open_deals_count = int(is_open.sum())
-    open_pipeline_value = float(val_series[is_open].sum())
-    
-    won_deals_count = int(is_won.sum())
-    won_deals_value = float(val_series[is_won].sum())
-    
-    dead_deals_count = int(is_dead.sum())
-    dead_deals_value = float(val_series[is_dead].sum())
-    
-    on_hold_deals_count = int(is_hold.sum())
-    on_hold_pipeline_value = float(val_series[is_hold].sum())
-    
-    # Probability metrics for active (open + hold) deals
+
+    # --------------------------------------------------------
+    # Normalize closure probability
+    # --------------------------------------------------------
+    prob_series = df["closure_probability"].apply(normalize_text)
+
+    def map_probability(value):
+        if value is None or pd.isna(value):
+            return None
+
+        value = str(value).strip().lower()
+
+        if not value:
+            return None
+
+        return CLOSURE_PROBABILITY_MAPPING.get(value)
+
+    prob_numeric = prob_series.apply(map_probability)
+
+    # Ensure numeric values
+    prob_numeric = pd.to_numeric(
+        prob_numeric,
+        errors="coerce"
+    )
+
+    # --------------------------------------------------------
+    # Normalize deal values
+    # --------------------------------------------------------
+    val_series = pd.to_numeric(
+        df["deal_value"],
+        errors="coerce"
+    ).fillna(0.0)
+
+    # --------------------------------------------------------
+    # Identify deal statuses
+    # --------------------------------------------------------
+    is_open = (
+        status_lower.isin(["open", "open deal"])
+        | status_series.isna()
+        | status_lower.eq("")
+    )
+
+    is_won = status_lower.eq("won")
+
+    is_dead = status_lower.isin([
+        "dead",
+        "lost",
+    ])
+
+    is_hold = status_lower.isin([
+        "on hold",
+        "hold",
+    ])
+
+    # --------------------------------------------------------
+    # Basic metrics
+    # --------------------------------------------------------
+    total_deals = int(len(df))
+
+    total_portfolio_value = float(
+        val_series.sum()
+    )
+
+    # --------------------------------------------------------
+    # Open deals
+    # --------------------------------------------------------
+    open_deals_count = int(
+        is_open.sum()
+    )
+
+    open_pipeline_value = float(
+        val_series.loc[is_open].sum()
+    )
+
+    # --------------------------------------------------------
+    # Won deals
+    # --------------------------------------------------------
+    won_deals_count = int(
+        is_won.sum()
+    )
+
+    won_deals_value = float(
+        val_series.loc[is_won].sum()
+    )
+
+    # --------------------------------------------------------
+    # Dead / lost deals
+    # --------------------------------------------------------
+    dead_deals_count = int(
+        is_dead.sum()
+    )
+
+    dead_deals_value = float(
+        val_series.loc[is_dead].sum()
+    )
+
+    # --------------------------------------------------------
+    # On-hold deals
+    # --------------------------------------------------------
+    on_hold_deals_count = int(
+        is_hold.sum()
+    )
+
+    on_hold_pipeline_value = float(
+        val_series.loc[is_hold].sum()
+    )
+
+    # --------------------------------------------------------
+    # Active pipeline
+    #
+    # Active = Open + On Hold
+    # --------------------------------------------------------
     active_mask = is_open | is_hold
-    active_probs = prob_numeric[active_mask].dropna()
-    
-    avg_prob = float(active_probs.mean()) if not active_probs.empty else 0.0
-    
-    # Weighted value (only for active deals with a known probability)
-    # Deals with missing probability are excluded (weighted value contribution is 0)
-    weighted_val = float((val_series[active_mask] * prob_numeric[active_mask].fillna(0.0)).sum())
-    
-    deals_missing_prob = int(prob_numeric[active_mask].isna().sum())
-    deals_with_prob = int(prob_numeric[active_mask].notna().sum())
-    
+
+    active_probs = prob_numeric.loc[active_mask].dropna()
+
+    # Average probability
+    avg_prob = (
+        float(active_probs.mean())
+        if not active_probs.empty
+        else 0.0
+    )
+
+    # --------------------------------------------------------
+    # Probability-weighted pipeline
+    # --------------------------------------------------------
+    active_probabilities = (
+        prob_numeric
+        .loc[active_mask]
+        .fillna(0.0)
+    )
+
+    weighted_val = float(
+        (
+            val_series.loc[active_mask]
+            * active_probabilities
+        ).sum()
+    )
+
+    # --------------------------------------------------------
+    # Probability coverage
+    # --------------------------------------------------------
+    deals_missing_prob = int(
+        prob_numeric.loc[active_mask]
+        .isna()
+        .sum()
+    )
+
+    deals_with_prob = int(
+        prob_numeric.loc[active_mask]
+        .notna()
+        .sum()
+    )
+
+    # --------------------------------------------------------
+    # Final result
+    # --------------------------------------------------------
     return {
         "total_deals": total_deals,
         "total_portfolio_value": total_portfolio_value,
+
         "open_deals_count": open_deals_count,
         "open_pipeline_value": open_pipeline_value,
+
         "won_deals_count": won_deals_count,
         "won_deals_value": won_deals_value,
+
         "dead_deals_count": dead_deals_count,
         "dead_deals_value": dead_deals_value,
+
         "on_hold_deals_count": on_hold_deals_count,
         "on_hold_pipeline_value": on_hold_pipeline_value,
+
         "avg_closure_probability": avg_prob,
         "weighted_pipeline_value": weighted_val,
+
         "deals_missing_probability": deals_missing_prob,
-        "deals_with_probability": deals_with_prob
+        "deals_with_probability": deals_with_prob,
     }
-
-
 # ============================================================
 # PIPELINE BY SECTOR
 # ============================================================

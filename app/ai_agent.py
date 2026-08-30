@@ -4,6 +4,7 @@ import json
 from typing import Dict, Any, Optional, List, Union
 import pandas as pd
 
+from app.config import GEMINI_API_KEY
 from app.query_engine import (
     rule_based_intent_detector,
     execute_intent,
@@ -30,7 +31,7 @@ class LLMClient:
     Supports dynamic model discovery, health verification, and transparent error reporting.
     """
     def __init__(self):
-        self.gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        self.gemini_key = GEMINI_API_KEY or os.getenv("GOOGLE_API_KEY")
         self.openai_key = os.getenv("OPENAI_API_KEY")
         self.provider = None
         self.active_model = None
