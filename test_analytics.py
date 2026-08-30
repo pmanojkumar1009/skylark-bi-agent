@@ -403,6 +403,79 @@ class TestBIAnalytics(unittest.TestCase):
         self.assertEqual(top_by_priority[1]["name"], "Huge Early Deal")
         self.assertTrue(top_by_priority[0]["priority_score"] > top_by_priority[1]["priority_score"])
 
+    def test_safe_probability_number_and_mixed_pipeline(self):
+        """
+        REGRESSION: Ensure safe_probability_number handles all realistic closure_probability
+        types from Monday.com / Arrow-backed pandas without crashing (AttributeError).
+
+        This test covers the Streamlit Cloud crash:
+            AttributeError: '...' object has no attribute 'lower'
+        triggered when get_pipeline_by_sector() called .lower() on a non-string value.
+        """
+        from app.analytics import safe_probability_number
+
+        # Named strings
+        self.assertAlmostEqual(safe_probability_number("High"), 0.80)
+        self.assertAlmostEqual(safe_probability_number("Medium"), 0.50)
+        self.assertAlmostEqual(safe_probability_number("Low"), 0.20)
+        self.assertAlmostEqual(safe_probability_number(" HIGH "), 0.80)
+        self.assertAlmostEqual(safe_probability_number("medium"), 0.50)
+        self.assertAlmostEqual(safe_probability_number("Very High"), 0.90)
+        self.assertAlmostEqual(safe_probability_number("Very Low"), 0.10)
+
+        # Percentage strings
+        self.assertAlmostEqual(safe_probability_number("80%"), 0.80)
+        self.assertAlmostEqual(safe_probability_number("50%"), 0.50)
+        self.assertAlmostEqual(safe_probability_number("20%"), 0.20)
+
+        # Numeric strings
+        self.assertAlmostEqual(safe_probability_number("0.8"), 0.80)
+        self.assertAlmostEqual(safe_probability_number("0.5"), 0.50)
+        self.assertAlmostEqual(safe_probability_number("80"), 0.80)
+        self.assertAlmostEqual(safe_probability_number("50"), 0.50)
+
+        # Numeric values
+        self.assertAlmostEqual(safe_probability_number(0.8), 0.80)
+        self.assertAlmostEqual(safe_probability_number(0.5), 0.50)
+        self.assertAlmostEqual(safe_probability_number(80), 0.80)
+        self.assertAlmostEqual(safe_probability_number(50), 0.50)
+        self.assertAlmostEqual(safe_probability_number(20), 0.20)
+
+        # Missing / invalid -> None (no crash)
+        self.assertIsNone(safe_probability_number(None))
+        self.assertIsNone(safe_probability_number(float("nan")))
+        self.assertIsNone(safe_probability_number(pd.NA))
+        self.assertIsNone(safe_probability_number(""))
+        self.assertIsNone(safe_probability_number("unknown"))
+        self.assertIsNone(safe_probability_number("n/a"))
+        self.assertIsNone(safe_probability_number("null"))
+        self.assertIsNone(safe_probability_number(True))
+        self.assertIsNone(safe_probability_number(False))
+        self.assertIsNone(safe_probability_number(object()))
+
+        # get_pipeline_by_sector must NOT crash with a mixed-type closure_probability column
+        mixed_deals = pd.DataFrame({
+            "id": range(14),
+            "sector_service": ["Renewables"] * 7 + ["Powerline"] * 7,
+            "deal_value": [1e7] * 14,
+            "deal_status": ["Open"] * 14,
+            "closure_probability": [
+                "High", "Medium", "Low", 0.8, 80, "80%", "0.5",
+                None, float("nan"), pd.NA, "", "unknown", True, False,
+            ],
+        })
+        result = get_pipeline_by_sector(mixed_deals)
+        self.assertIsInstance(result, list)
+        self.assertGreater(len(result), 0)
+        # Renewables has High (0.8) + Medium (0.5) + Low (0.2) + 0.8 + 0.8 + 0.8 + 0.5
+        # = 4.4 * 1e7 = 44_000_000 weighted value
+        renewables = next(r for r in result if r["sector"] == "Renewables")
+        self.assertAlmostEqual(renewables["weighted_pipeline_value"], 44_000_000.0, delta=1.0)
+        # Powerline rows all have None/missing probs -> weighted = 0
+        powerline = next(r for r in result if r["sector"] == "Powerline")
+        self.assertAlmostEqual(powerline["weighted_pipeline_value"], 0.0, delta=1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
 

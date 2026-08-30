@@ -207,7 +207,7 @@ def plot_pipeline_by_stage(deals_df: pd.DataFrame) -> go.Figure:
 
 def plot_weighted_pipeline_by_sector(deals_df: pd.DataFrame) -> go.Figure:
     """Renders a side-by-side bar chart showing Open vs. Weighted Pipeline by Sector."""
-    from app.analytics import clean_deals_df, normalize_sector, CLOSURE_PROBABILITY_MAPPING
+    from app.analytics import clean_deals_df, normalize_sector, safe_probability_number
     
     df = clean_deals_df(deals_df)
     if df.empty:
@@ -216,14 +216,12 @@ def plot_weighted_pipeline_by_sector(deals_df: pd.DataFrame) -> go.Figure:
     df["normalized_sector"] = df["sector_service"].apply(normalize_sector)
     df["deal_value_clean"] = df["deal_value"].fillna(0.0)
     
-    status_lower = df["deal_status"].fillna("").str.lower()
+    status_lower = df["deal_status"].fillna("").astype(str).str.lower()
     df["is_open"] = status_lower.isin(["open", "open deal"]) | df["deal_status"].isna()
     df["is_hold"] = status_lower == "on hold"
     df["is_active"] = df["is_open"] | df["is_hold"]
     
-    df["prob_num"] = df["closure_probability"].fillna("").str.lower().apply(
-        lambda x: CLOSURE_PROBABILITY_MAPPING.get(x, 0.0)
-    )
+    df["prob_num"] = df["closure_probability"].apply(safe_probability_number).fillna(0.0)
     df["open_pipeline"] = df["deal_value_clean"].where(df["is_active"], 0.0)
     df["weighted_pipeline"] = df["open_pipeline"] * df["prob_num"]
     

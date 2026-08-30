@@ -48,6 +48,113 @@ def normalize_text(value) -> str | None:
         return None
 
 
+def safe_probability_number(value: Any) -> Optional[float]:
+    """
+    Convert closure probability to a normalized numeric float [0.0, 1.0].
+    Safely handles all realistic Monday.com / Pandas data types without raising AttributeError or ValueError.
+
+    Supported examples:
+        - Named strings:
+            "High", "high", " HIGH "           -> 0.80
+            "Medium", "medium", " MEDIUM "     -> 0.50
+            "Low", "low", " LOW "              -> 0.20
+            "Very High", "very high"           -> 0.90
+            "Very Low", "very low"             -> 0.10
+        - Percentage strings:
+            "80%", "50%", "20%", " 80 % "      -> 0.80, 0.50, 0.20
+        - Numeric strings:
+            "0.8", "0.5", "0.2"                -> 0.80, 0.50, 0.20
+            "80", "50", "20"                   -> 0.80, 0.50, 0.20
+        - Numeric values:
+            0.8, 0.5, 0.2                      -> 0.80, 0.50, 0.20
+            80, 50, 20                         -> 0.80, 0.50, 0.20
+            80.0, 50.0, 20.0                   -> 0.80, 0.50, 0.20
+        - Missing / Empty / Invalid values:
+            None, NaN, pd.NA, "", "unknown", "n/a", "na", "null", "-", "--", False, True, object() -> None
+    """
+    if value is None:
+        return None
+
+    # Handle boolean explicitly: in Python isinstance(True, int) is True, but bool is not a probability
+    if isinstance(value, bool):
+        return None
+
+    # Check for pandas/numpy NaN
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+
+    # 1. Numeric types (int, float)
+    if isinstance(value, (int, float)):
+        try:
+            numeric_val = float(value)
+            if math.isnan(numeric_val) or math.isinf(numeric_val) or numeric_val < 0:
+                return None
+            if numeric_val > 1.0:
+                if numeric_val <= 100.0:
+                    numeric_val = numeric_val / 100.0
+                else:
+                    return None
+            return max(0.0, min(1.0, numeric_val))
+        except (TypeError, ValueError):
+            return None
+
+    # 2. String types or convertible types
+    try:
+        value_str = str(value).strip().lower()
+    except Exception:
+        return None
+
+    if not value_str:
+        return None
+
+    clean_str = value_str.replace(" ", "").replace("_", "")
+
+    if clean_str in ["none", "nan", "null", "unknown", "n/a", "na", "-", "--", "missing"]:
+        return None
+
+    # 3. Named probabilities
+    named_mapping = {
+        "high": 0.80,
+        "medium": 0.50,
+        "low": 0.20,
+        "veryhigh": 0.90,
+        "veryhighprobability": 0.90,
+        "verylow": 0.10,
+        "verylowprobability": 0.10,
+    }
+    if clean_str in named_mapping:
+        return named_mapping[clean_str]
+
+    # 4. Percentage string e.g. "80%", "50.0%"
+    if clean_str.endswith("%"):
+        try:
+            num = float(clean_str[:-1])
+            if math.isnan(num) or math.isinf(num) or num < 0:
+                return None
+            if num > 1.0:
+                num = num / 100.0
+            return max(0.0, min(1.0, num))
+        except (ValueError, TypeError):
+            return None
+
+    # 5. Numeric string e.g. "0.8", "80", "50.5"
+    try:
+        num = float(clean_str)
+        if math.isnan(num) or math.isinf(num) or num < 0:
+            return None
+        if num > 1.0:
+            if num <= 100.0:
+                num = num / 100.0
+            else:
+                return None
+        return max(0.0, min(1.0, num))
+    except (ValueError, TypeError):
+        return None
+
+
 def normalize_sector(sector_name: Any) -> str:
     """Standardize sector names for aggregation and joining."""
     text = normalize_text(sector_name)
@@ -61,6 +168,7 @@ def clean_deals_df(df: Any) -> pd.DataFrame:
     Remove Monday.com template/header rows and normalize text fields.
     Converts inputs to pd.DataFrame if they are list/dict.
     """
+
     if not isinstance(df, pd.DataFrame):
         df = pd.DataFrame(df)
         
@@ -161,26 +269,17 @@ def get_pipeline_summary(deals_df: pd.DataFrame) -> Dict[str, Any]:
     # --------------------------------------------------------
     # Normalize closure probability
     # --------------------------------------------------------
-    prob_series = df["closure_probability"].map(normalize_text)
-
-    def map_probability(value):
-        if value is None or pd.isna(value):
-            return None
-
-        value = str(value).strip().lower()
-
-        if not value:
-            return None
-
-        return CLOSURE_PROBABILITY_MAPPING.get(value)
-
-    prob_numeric = prob_series.apply(map_probability)
+    if "closure_probability" in df.columns:
+        prob_numeric = df["closure_probability"].apply(safe_probability_number)
+    else:
+        prob_numeric = pd.Series([None] * len(df), index=df.index)
 
     # Ensure numeric values
     prob_numeric = pd.to_numeric(
         prob_numeric,
         errors="coerce"
     )
+
 
     # --------------------------------------------------------
     # Normalize deal values
@@ -354,16 +453,13 @@ def get_pipeline_by_sector(deals_df: pd.DataFrame) -> List[Dict[str, Any]]:
     df["deal_value_clean"] = df["deal_value"].fillna(0.0)
     
     status_series = df["deal_status"].apply(normalize_text)
-    status_lower = status_series.str.lower()
+    status_lower = status_series.fillna("").astype(str).str.lower()
     
     df["is_open"] = status_lower.isin(["open", "open deal"]) | status_series.isna()
     df["is_hold"] = status_lower == "on hold"
     df["is_active"] = df["is_open"] | df["is_hold"]
     
-    prob_series = df["closure_probability"].apply(normalize_text)
-    df["prob_num"] = prob_series.apply(
-        lambda x: CLOSURE_PROBABILITY_MAPPING.get(x.lower()) if x else None
-    )
+    df["prob_num"] = df["closure_probability"].apply(safe_probability_number)
     df["weighted_val"] = df["deal_value_clean"] * df["prob_num"].fillna(0.0)
     
     results = []
