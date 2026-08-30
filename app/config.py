@@ -1,11 +1,11 @@
 import os
 from dotenv import load_dotenv
 
-# Load local .env file
+# Load local .env when running locally
 load_dotenv()
 
 # ---------------------------------------------------------
-# Streamlit Secrets support
+# Streamlit Cloud Secrets
 # ---------------------------------------------------------
 
 try:
@@ -14,71 +14,69 @@ except ImportError:
     st = None
 
 
-def get_config(name, default=None):
+def get_secret(name, default=None):
     """
-    Get configuration value.
-
-    Priority:
-    1. Environment variable
-    2. Streamlit Secrets
-    3. Default value
+    Read configuration from:
+    1. Streamlit secrets (Cloud)
+    2. Environment variables / .env (Local)
     """
 
-    # Local environment / .env
-    value = os.getenv(name)
-
-    if value:
-        return value.strip()
-
-    # Streamlit Cloud Secrets
+    # Streamlit Cloud
     if st is not None:
         try:
             value = st.secrets.get(name)
 
-            if value:
-                return str(value).strip()
+            if value is not None:
+                return str(value)
 
         except Exception:
             pass
 
-    return default
+    # Local .env / environment variables
+    return os.getenv(name, default)
 
 
 # ---------------------------------------------------------
-# Monday.com API configuration
+# Monday.com Configuration
 # ---------------------------------------------------------
 
-MONDAY_API_TOKEN = get_config("MONDAY_API_TOKEN")
+MONDAY_API_TOKEN = get_secret("MONDAY_API_TOKEN")
 
 DEALS_BOARD_ID = int(
-    get_config("DEALS_BOARD_ID", "5030964525")
+    get_secret(
+        "DEALS_BOARD_ID",
+        "5030964525"
+    )
 )
 
 WORK_ORDERS_BOARD_ID = int(
-    get_config("WORK_ORDERS_BOARD_ID", "5030964579")
+    get_secret(
+        "WORK_ORDERS_BOARD_ID",
+        "5030964579"
+    )
 )
 
 MONDAY_API_URL = "https://api.monday.com/v2"
 
 
 # ---------------------------------------------------------
-# Gemini API configuration
+# Gemini Configuration
 # ---------------------------------------------------------
 
-GEMINI_API_KEY = get_config("GEMINI_API_KEY")
+GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 
 
 # ---------------------------------------------------------
-# Configuration validation
+# Validation
 # ---------------------------------------------------------
 
 def validate_config():
-    """Validate that required configuration is available."""
+    """Validate required configuration."""
 
     if not MONDAY_API_TOKEN:
         raise ValueError(
             "MONDAY_API_TOKEN is missing. "
-            "Configure it in .env locally or Streamlit Secrets."
+            "Configure it in .env or Streamlit Secrets."
         )
 
     if not DEALS_BOARD_ID:
@@ -104,18 +102,22 @@ if __name__ == "__main__":
     print("SKYLARK BI CONFIGURATION")
     print("=" * 60)
 
-    print("Configuration loaded successfully.")
-    print(f"Deals Board ID: {DEALS_BOARD_ID}")
-    print(f"Work Orders Board ID: {WORK_ORDERS_BOARD_ID}")
-
     print(
-        f"Monday API token loaded: "
-        f"{bool(MONDAY_API_TOKEN)}"
+        f"Deals Board ID: {DEALS_BOARD_ID}"
     )
 
     print(
-        f"Gemini API key loaded: "
-        f"{bool(GEMINI_API_KEY)}"
+        f"Work Orders Board ID: {WORK_ORDERS_BOARD_ID}"
+    )
+
+    print(
+        "Monday API token: "
+        + ("[LOADED]" if MONDAY_API_TOKEN else "[MISSING]")
+    )
+
+    print(
+        "Gemini API key: "
+        + ("[LOADED]" if GEMINI_API_KEY else "[MISSING]")
     )
 
     print("=" * 60)
