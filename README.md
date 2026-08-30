@@ -1,15 +1,8 @@
-Yes. Your current README is **technically strong but too long, repetitive, and assignment-documentation-heavy**. For GitHub/recruiters, it should communicate in the first 20–30 seconds:
 
-**What is it? → Why is it impressive? → How does it work? → Tech stack → Features → Demo → Architecture → Testing → Setup.**
-
-I would replace the current README completely with this cleaner, recruiter-focused version:
-
-````markdown
 # Skylark BI — AI Business Intelligence & Decision Intelligence Agent
 
 > **An AI-powered Business Intelligence platform that lets founders and executives ask natural-language questions about sales, operations, finance, and business performance — using live Monday.com data.**
 
-[![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-App-red?logo=streamlit)](https://streamlit.io/)
 [![Pandas](https://img.shields.io/badge/Pandas-Analytics-150458?logo=pandas)](https://pandas.pydata.org/)
 [![Google Gemini](https://img.shields.io/badge/Google-Gemini-orange)](https://ai.google.dev/)
